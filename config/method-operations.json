@@ -1,0 +1,58 @@
+{
+  "strict": true,
+  "mappings": {
+    "GET": {
+      "allowedOperations": [
+        "find", "findOne", "countDocuments", "distinct", 
+        "aggregate", "explain"
+      ],
+      "description": "Read operations only"
+    },
+    "POST": {
+      "allowedOperations": [
+        "insertOne", "insertMany", "aggregate"
+      ],
+      "description": "Create operations and read-heavy aggregations"
+    },
+    "PUT": {
+      "allowedOperations": [
+        "replaceOne", "updateOne"
+      ],
+      "description": "Full document replacement"
+    },
+    "PATCH": {
+      "allowedOperations": [
+        "updateOne", "updateMany"
+      ],
+      "description": "Partial document updates"
+    },
+    "DELETE": {
+      "allowedOperations": [
+        "deleteOne", "deleteMany"
+      ],
+      "description": "Delete operations"
+    }
+  },
+  "specialCases": {
+    "aggregate": {
+      "GET": "Read-only aggregations (no $out, $merge)",
+      "POST": "Aggregations with write stages ($out, $merge)"
+    },
+    "bulkWrite": {
+      "POST": "Mixed operations require POST method"
+    }
+  },
+  "validation": {
+    "enabled": true,
+    "rejectOnViolation": true,
+    "logViolations": true
+  },
+  "operationInference": {
+    "GET /crud/:collection": "find",
+    "GET /crud/:collection/:id": "findOne",
+    "POST /crud/:collection": "insertOne",
+    "PUT /crud/:collection/:id": "replaceOne",
+    "PATCH /crud/:collection/:id": "updateOne",
+    "DELETE /crud/:collection/:id": "deleteOne"
+  }
+}

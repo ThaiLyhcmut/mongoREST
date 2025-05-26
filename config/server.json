@@ -1,0 +1,65 @@
+{
+  "server": {
+    "host": "${HOST:-localhost}",
+    "port": "${PORT:-3000}",
+    "bodyLimit": 10485760,
+    "keepAliveTimeout": 5000,
+    "pluginTimeout": 30000
+  },
+  "logging": {
+    "level": "${LOG_LEVEL:-info}",
+    "prettyPrint": "${NODE_ENV:-development}" === "development",
+    "serializers": {
+      "req": "pino-std-serializers.req",
+      "res": "pino-std-serializers.res"
+    }
+  },
+  "swagger": {
+    "enabled": true,
+    "routePrefix": "/docs",
+    "openapi": {
+      "openapi": "3.0.0",
+      "info": {
+        "title": "MongoREST API",
+        "description": "Auto-generated REST API for MongoDB",
+        "version": "1.0.0"
+      },
+      "servers": [
+        {
+          "url": "http://localhost:3000",
+          "description": "Development server"
+        }
+      ],
+      "components": {
+        "securitySchemes": {
+          "bearerAuth": {
+            "type": "http",
+            "scheme": "bearer",
+            "bearerFormat": "JWT"
+          }
+        }
+      },
+      "security": [
+        {
+          "bearerAuth": []
+        }
+      ]
+    },
+    "uiConfig": {
+      "deepLinking": false,
+      "displayOperationId": true
+    },
+    "staticCSP": true,
+    "transformStaticCSP": "(header) => header"
+  },
+  "cors": {
+    "origin": "${CORS_ORIGIN:-*}",
+    "credentials": true,
+    "methods": ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]
+  },
+  "rateLimit": {
+    "max": "${RATE_LIMIT_MAX:-1000}",
+    "timeWindow": "${RATE_LIMIT_WINDOW:-3600000}",
+    "errorResponseBuilder": "(request, context) => ({ error: 'Rate limit exceeded', retryAfter: context.ttl })"
+  }
+}

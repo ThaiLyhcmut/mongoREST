@@ -1,0 +1,179 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Products Collection",
+  "description": "Product catalog information",
+  "type": "object",
+  "collection": "products",
+  "indexes": [
+    { "fields": { "sku": 1 }, "unique": true },
+    { "fields": { "category": 1, "status": 1 } },
+    { "fields": { "name": "text", "description": "text", "tags": "text" } },
+    { "fields": { "price": 1 } },
+    { "fields": { "createdAt": -1 } }
+  ],
+  "properties": {
+    "_id": {
+      "type": "string",
+      "pattern": "^[0-9a-fA-F]{24}$",
+      "description": "MongoDB ObjectId"
+    },
+    "sku": {
+      "type": "string",
+      "pattern": "^[A-Z0-9-]+$",
+      "description": "Stock Keeping Unit"
+    },
+    "name": {
+      "type": "string",
+      "minLength": 3,
+      "maxLength": 200,
+      "description": "Product name"
+    },
+    "description": {
+      "type": "string",
+      "maxLength": 2000,
+      "description": "Product description"
+    },
+    "category": {
+      "type": "string",
+      "enum": ["electronics", "clothing", "books", "home", "sports", "beauty", "toys", "automotive"]
+    },
+    "subcategory": {
+      "type": "string",
+      "maxLength": 100
+    },
+    "price": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 999999.99
+    },
+    "currency": {
+      "type": "string",
+      "enum": ["USD", "VND", "EUR", "GBP"],
+      "default": "USD"
+    },
+    "inventory": {
+      "type": "object",
+      "properties": {
+        "quantity": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "reserved": {
+          "type": "integer",
+          "minimum": 0,
+          "default": 0
+        },
+        "lowStockThreshold": {
+          "type": "integer",
+          "minimum": 0,
+          "default": 10
+        }
+      },
+      "required": ["quantity"]
+    },
+    "images": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "format": "uri"
+      },
+      "maxItems": 10
+    },
+    "tags": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "maxLength": 50
+      },
+      "uniqueItems": true,
+      "maxItems": 20
+    },
+    "specifications": {
+      "type": "object",
+      "additionalProperties": {
+        "oneOf": [
+          { "type": "string" },
+          { "type": "number" },
+          { "type": "boolean" }
+        ]
+      }
+    },
+    "ratings": {
+      "type": "object",
+      "properties": {
+        "average": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 5
+        },
+        "count": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "status": {
+      "type": "string",
+      "enum": ["active", "inactive", "discontinued", "draft"],
+      "default": "draft"
+    },
+    "createdAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "updatedAt": {
+      "type": "string",
+      "format": "date-time"
+    }
+  },
+  "required": ["sku", "name", "category", "price", "inventory"],
+  "additionalProperties": false,
+  "relationships": {
+    "orderItems": {
+      "type": "hasMany",
+      "collection": "orders",
+      "localField": "_id",
+      "foreignField": "items.productId",
+      "alias": "orderItems",
+      "description": "Orders containing this product",
+      "pipeline": [
+        { "$unwind": "$items" },
+        { "$match": { "items.productId": "{{localValue}}" } }
+      ]
+    },
+    "reviews": {
+      "type": "hasMany",
+      "collection": "product_reviews",
+      "localField": "_id",
+      "foreignField": "productId",
+      "alias": "reviews",
+      "description": "Customer reviews for this product",
+      "defaultFilters": {
+        "status": "approved"
+      },
+      "defaultSort": { "createdAt": -1 }
+    }
+  },
+  "mongorest": {
+    "permissions": {
+      "read": ["user", "admin", "analyst", "dev"],
+      "create": ["admin", "dev"],
+      "update": ["admin", "dev"],
+      "delete": ["admin"]
+    },
+    "rateLimits": {
+      "read": { "requests": 200, "window": "1h" },
+      "write": { "requests": 100, "window": "1h" }
+    },
+    "hooks": {
+      "beforeCreate": ["generateSKU", "setTimestamps"],
+      "afterCreate": ["updateSearchIndex"],
+      "beforeUpdate": ["setUpdatedAt"],
+      "afterUpdate": ["updateSearchIndex", "checkLowStock"]
+    },
+    "searchFields": ["name", "description", "tags"],
+    "defaultSort": { "createdAt": -1 },
+    "defaultLimit": 50,
+    "maxLimit": 500
+  }
+}

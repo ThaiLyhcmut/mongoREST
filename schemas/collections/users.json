@@ -1,0 +1,111 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Users Collection",
+  "description": "User account information",
+  "type": "object",
+  "collection": "users",
+  "indexes": [
+    { "fields": { "email": 1 }, "unique": true },
+    { "fields": { "createdAt": -1 } },
+    { "fields": { "profile.country": 1, "status": 1 } },
+    { "fields": { "name": "text", "email": "text" } }
+  ],
+  "properties": {
+    "_id": {
+      "type": "string",
+      "pattern": "^[0-9a-fA-F]{24}$",
+      "description": "MongoDB ObjectId"
+    },
+    "email": {
+      "type": "string",
+      "format": "email",
+      "description": "User email address"
+    },
+    "name": {
+      "type": "string",
+      "minLength": 2,
+      "maxLength": 100,
+      "description": "Full name"
+    },
+    "profile": {
+      "type": "object",
+      "properties": {
+        "age": {
+          "type": "integer",
+          "minimum": 13,
+          "maximum": 120
+        },
+        "country": {
+          "type": "string",
+          "enum": ["Vietnam", "Thailand", "Malaysia", "Singapore", "Indonesia", "Philippines"]
+        },
+        "interests": {
+          "type": "array",
+          "items": { "type": "string" },
+          "maxItems": 10
+        },
+        "avatar": {
+          "type": "string",
+          "format": "uri"
+        }
+      },
+      "required": ["country"]
+    },
+    "status": {
+      "type": "string",
+      "enum": ["active", "inactive", "suspended"],
+      "default": "active"
+    },
+    "lastLogin": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "createdAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "updatedAt": {
+      "type": "string",
+      "format": "date-time"
+    }
+  },
+  "required": ["email", "name", "profile"],
+  "additionalProperties": false,
+  "relationships": {
+    "orders": {
+      "type": "hasMany",
+      "collection": "orders",
+      "localField": "_id", 
+      "foreignField": "customerId",
+      "alias": "orders",
+      "description": "Orders placed by this user",
+      "pagination": {
+        "defaultLimit": 20,
+        "maxLimit": 100
+      },
+      "defaultSort": { "orderDate": -1 }
+    }
+  },
+  "mongorest": {
+    "permissions": {
+      "read": ["user", "admin", "analyst", "dev"],
+      "create": ["admin", "dev"],
+      "update": ["admin", "dev"],
+      "delete": ["admin"]
+    },
+    "rateLimits": {
+      "read": { "requests": 100, "window": "1h" },
+      "write": { "requests": 50, "window": "1h" }
+    },
+    "hooks": {
+      "beforeCreate": ["validateEmail", "setTimestamps"],
+      "afterCreate": ["sendWelcomeEmail"],
+      "beforeUpdate": ["setUpdatedAt"],
+      "afterUpdate": ["sendNotification"]
+    },
+    "searchFields": ["name", "email"],
+    "defaultSort": { "createdAt": -1 },
+    "defaultLimit": 50,
+    "maxLimit": 1000
+  }
+}

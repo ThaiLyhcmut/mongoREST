@@ -1,0 +1,85 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Product Categories Junction Table",
+  "description": "Many-to-many relationship between products and categories",
+  "type": "object",
+  "collection": "product_categories",
+  "indexes": [
+    { "fields": { "productId": 1, "categoryId": 1 }, "unique": true },
+    { "fields": { "categoryId": 1 } },
+    { "fields": { "productId": 1 } },
+    { "fields": { "isPrimary": 1 } }
+  ],
+  "properties": {
+    "_id": {
+      "type": "string",
+      "pattern": "^[0-9a-fA-F]{24}$",
+      "description": "MongoDB ObjectId"
+    },
+    "productId": {
+      "type": "string",
+      "pattern": "^[0-9a-fA-F]{24}$",
+      "description": "Reference to product _id"
+    },
+    "categoryId": {
+      "type": "string",
+      "pattern": "^[0-9a-fA-F]{24}$",
+      "description": "Reference to category _id"
+    },
+    "isPrimary": {
+      "type": "boolean",
+      "default": false,
+      "description": "Whether this is the primary category for the product"
+    },
+    "sortOrder": {
+      "type": "integer",
+      "minimum": 0,
+      "default": 0,
+      "description": "Display order within category"
+    },
+    "createdAt": {
+      "type": "string",
+      "format": "date-time"
+    }
+  },
+  "required": ["productId", "categoryId"],
+  "additionalProperties": false,
+  "relationships": {
+    "product": {
+      "type": "belongsTo",
+      "collection": "products",
+      "localField": "productId",
+      "foreignField": "_id",
+      "alias": "product",
+      "description": "Product in this relationship"
+    },
+    "category": {
+      "type": "belongsTo",
+      "collection": "categories",
+      "localField": "categoryId",
+      "foreignField": "_id",
+      "alias": "category",
+      "description": "Category in this relationship"
+    }
+  },
+  "mongorest": {
+    "permissions": {
+      "read": ["user", "admin", "analyst", "dev"],
+      "create": ["admin", "dev"],
+      "update": ["admin", "dev"],
+      "delete": ["admin", "dev"]
+    },
+    "rateLimits": {
+      "read": { "requests": 500, "window": "1h" },
+      "write": { "requests": 200, "window": "1h" }
+    },
+    "hooks": {
+      "beforeCreate": ["setTimestamps"],
+      "afterCreate": ["updateSearchIndex"],
+      "afterDelete": ["updateSearchIndex"]
+    },
+    "defaultSort": { "sortOrder": 1 },
+    "defaultLimit": 100,
+    "maxLimit": 1000
+  }
+}

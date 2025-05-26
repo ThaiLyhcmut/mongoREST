@@ -1,0 +1,259 @@
+{
+  "name": "generateUserReport",
+  "version": "1.0.0",
+  "description": "Generate comprehensive user analytics report",
+  "category": "analytics",
+  "method": "POST",
+  "endpoint": "/functions/analytics/user-report",
+  "permissions": ["admin", "analyst", "dev"],
+  "rateLimits": {
+    "requests": 5,
+    "window": "1h"
+  },
+  "input": {
+    "type": "object",
+    "properties": {
+      "dateRange": {
+        "type": "object",
+        "properties": {
+          "start": { 
+            "type": "string", 
+            "format": "date",
+            "description": "Start date for the report (YYYY-MM-DD)"
+          },
+          "end": { 
+            "type": "string", 
+            "format": "date",
+            "description": "End date for the report (YYYY-MM-DD)"
+          }
+        },
+        "required": ["start", "end"]
+      },
+      "segments": {
+        "type": "array",
+        "items": { 
+          "type": "string",
+          "enum": ["country", "age_group", "status", "all"]
+        },
+        "default": ["all"],
+        "description": "Segmentation criteria for the report"
+      },
+      "includeCharts": {
+        "type": "boolean",
+        "default": false,
+        "description": "Include chart data in response"
+      },
+      "format": {
+        "type": "string",
+        "enum": ["json", "csv", "pdf"],
+        "default": "json",
+        "description": "Output format"
+      }
+    },
+    "required": ["dateRange"]
+  },
+  "output": {
+    "type": "object",
+    "properties": {
+      "reportId": { "type": "string" },
+      "summary": {
+        "type": "object",
+        "properties": {
+          "totalUsers": { "type": "integer" },
+          "activeUsers": { "type": "integer" },
+          "newUsers": { "type": "integer" },
+          "suspendedUsers": { "type": "integer" }
+        }
+      },
+      "segments": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "name": { "type": "string" },
+            "count": { "type": "integer" },
+            "percentage": { "type": "number" }
+          }
+        }
+      },
+      "trends": {
+        "type": "object",
+        "properties": {
+          "daily": { "type": "array" },
+          "weekly": { "type": "array" },
+          "monthly": { "type": "array" }
+        }
+      },
+      "downloadUrl": { "type": "string" },
+      "generatedAt": { "type": "string", "format": "date-time" }
+    }
+  },
+  "steps": [
+    {
+      "id": "getUserStats",
+      "type": "aggregate",
+      "collection": "users",
+      "pipeline": [
+        {
+          "$match": {
+            "createdAt": {
+              "$gte": "{{params.dateRange.start}}T00:00:00.000Z",
+              "$lte": "{{params.dateRange.end}}T23:59:59.999Z"
+            }
+          }
+        },
+        {
+          "$group": {
+            "_id": {
+              "country": "$profile.country",
+              "status": "$status",
+              "ageGroup": {
+                "$cond": {
+                  "if": { "$lt": ["$profile.age", 25] },
+                  "then": "18-24",
+                  "else": {
+                    "$cond": {
+                      "if": { "$lt": ["$profile.age", 35] },
+                      "then": "25-34",
+                      "else": {
+                        "$cond": {
+                          "if": { "$lt": ["$profile.age", 45] },
+                          "then": "35-44",
+                          "else": "45+"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "count": { "$sum": 1 },
+            "lastLogin": { "$max": "$lastLogin" }
+          }
+        },
+        {
+          "$group": {
+            "_id": null,
+            "totalUsers": { "$sum": "$count" },
+            "byCountry": {
+              "$push": {
+                "country": "$_id.country",
+                "count": "$count"
+              }
+            },
+            "byStatus": {
+              "$push": {
+                "status": "$_id.status",
+                "count": "$count"
+              }
+            },
+            "byAgeGroup": {
+              "$push": {
+                "ageGroup": "$_id.ageGroup",
+                "count": "$count"
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "getNewUsers",
+      "type": "aggregate",
+      "collection": "users",
+      "pipeline": [
+        {
+          "$match": {
+            "createdAt": {
+              "$gte": "{{params.dateRange.start}}T00:00:00.000Z",
+              "$lte": "{{params.dateRange.end}}T23:59:59.999Z"
+            }
+          }
+        },
+        {
+          "$group": {
+            "_id": {
+              "$dateToString": {
+                "format": "%Y-%m-%d",
+                "date": "$createdAt"
+              }
+            },
+            "newUsers": { "$sum": 1 }
+          }
+        },
+        {
+          "$sort": { "_id": 1 }
+        }
+      ]
+    },
+    {
+      "id": "getActiveUsers",
+      "type": "aggregate", 
+      "collection": "users",
+      "pipeline": [
+        {
+          "$match": {
+            "lastLogin": {
+              "$gte": "{{params.dateRange.start}}T00:00:00.000Z",
+              "$lte": "{{params.dateRange.end}}T23:59:59.999Z"
+            },
+            "status": "active"
+          }
+        },
+        {
+          "$count": "activeUsers"
+        }
+      ]
+    },
+    {
+      "id": "processData",
+      "type": "transform",
+      "script": "processUserReportData",
+      "input": {
+        "userStats": "{{steps.getUserStats.output}}",
+        "newUsers": "{{steps.getNewUsers.output}}",
+        "activeUsers": "{{steps.getActiveUsers.output}}",
+        "segments": "{{params.segments}}"
+      }
+    },
+    {
+      "id": "saveReport", 
+      "type": "insertOne",
+      "collection": "reports",
+      "document": {
+        "type": "userAnalytics",
+        "generatedAt": "{{now}}",
+        "generatedBy": "{{user.id}}",
+        "parameters": {
+          "dateRange": "{{params.dateRange}}",
+          "segments": "{{params.segments}}",
+          "format": "{{params.format}}"
+        },
+        "data": "{{steps.processData.output}}",
+        "summary": {
+          "totalUsers": "{{steps.getUserStats.output[0].totalUsers}}",
+          "activeUsers": "{{steps.getActiveUsers.output[0].activeUsers}}",
+          "newUsers": "{{steps.getNewUsers.output.length}}",
+          "dateRange": "{{params.dateRange}}"
+        },
+        "status": "completed"
+      }
+    }
+  ],
+  "hooks": {
+    "beforeExecution": ["validateDateRange", "checkPermissions"],
+    "afterExecution": ["sendNotification", "updateUsageStats"],
+    "onError": ["logError", "sendErrorNotification"]
+  },
+  "caching": {
+    "enabled": true,
+    "ttl": 3600,
+    "key": "user-report-{{params.dateRange.start}}-{{params.dateRange.end}}-{{params.segments.join('-')}}"
+  },
+  "timeout": 60000,
+  "errorHandling": {
+    "strategy": "rollback",
+    "retryCount": 2,
+    "retryDelay": 1000
+  }
+}

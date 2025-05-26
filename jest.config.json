@@ -1,0 +1,28 @@
+{
+  "testEnvironment": "node",
+  "roots": ["<rootDir>/src", "<rootDir>/tests"],
+  "testMatch": [
+    "**/__tests__/**/*.js",
+    "**/?(*.)+(spec|test).js"
+  ],
+  "collectCoverageFrom": [
+    "src/**/*.js",
+    "!src/**/*.test.js",
+    "!src/**/*.spec.js",
+    "!**/node_modules/**"
+  ],
+  "coverageDirectory": "coverage",
+  "coverageReporters": [
+    "text",
+    "lcov",
+    "html"
+  ],
+  "setupFilesAfterEnv": ["<rootDir>/tests/setup.js"],
+  "testTimeout": 30000,
+  "verbose": true,
+  "clearMocks": true,
+  "resetMocks": true,
+  "restoreMocks": true,
+  "globalSetup": "<rootDir>/tests/global-setup.js",
+  "globalTeardown": "<rootDir>/tests/global-teardown.js"
+}

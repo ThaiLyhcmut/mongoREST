@@ -1,0 +1,387 @@
+{
+  "name": "generateSalesReport",
+  "version": "1.0.0",
+  "description": "Generate comprehensive sales and revenue report with multiple metrics",
+  "category": "reports",
+  "method": "POST",
+  "endpoint": "/functions/reports/sales-report",
+  "permissions": ["admin", "analyst", "dev"],
+  "rateLimits": {
+    "requests": 10,
+    "window": "1h"
+  },
+  "input": {
+    "type": "object",
+    "properties": {
+      "dateRange": {
+        "type": "object",
+        "properties": {
+          "start": { 
+            "type": "string", 
+            "format": "date",
+            "description": "Report start date (YYYY-MM-DD)"
+          },
+          "end": { 
+            "type": "string", 
+            "format": "date",
+            "description": "Report end date (YYYY-MM-DD)"
+          }
+        },
+        "required": ["start", "end"]
+      },
+      "groupBy": {
+        "type": "string",
+        "enum": ["day", "week", "month", "quarter"],
+        "default": "month",
+        "description": "Time period grouping for report"
+      },
+      "includeDetails": {
+        "type": "boolean",
+        "default": true,
+        "description": "Include detailed breakdown by product and customer"
+      },
+      "currency": {
+        "type": "string",
+        "enum": ["USD", "VND", "EUR", "GBP"],
+        "default": "USD",
+        "description": "Currency for revenue calculations"
+      },
+      "regions": {
+        "type": "array",
+        "items": {
+          "type": "string",
+          "enum": ["Vietnam", "Thailand", "Malaysia", "Singapore", "Indonesia", "Philippines"]
+        },
+        "description": "Filter by specific regions (optional)"
+      }
+    },
+    "required": ["dateRange"]
+  },
+  "output": {
+    "type": "object",
+    "properties": {
+      "reportId": { "type": "string" },
+      "summary": {
+        "type": "object",
+        "properties": {
+          "totalRevenue": { "type": "number" },
+          "totalOrders": { "type": "integer" },
+          "averageOrderValue": { "type": "number" },
+          "uniqueCustomers": { "type": "integer" },
+          "topProducts": { "type": "array" },
+          "topCustomers": { "type": "array" }
+        }
+      },
+      "trends": {
+        "type": "object",
+        "properties": {
+          "revenue": { "type": "array" },
+          "orders": { "type": "array" },
+          "customers": { "type": "array" }
+        }
+      },
+      "breakdowns": {
+        "type": "object",
+        "properties": {
+          "byProduct": { "type": "array" },
+          "byCustomer": { "type": "array" },
+          "byRegion": { "type": "array" }
+        }
+      },
+      "downloadUrl": { "type": "string" },
+      "generatedAt": { "type": "string", "format": "date-time" }
+    }
+  },
+  "steps": [
+    {
+      "id": "getSalesData",
+      "type": "aggregate",
+      "collection": "orders",
+      "pipeline": [
+        {
+          "$match": {
+            "orderDate": {
+              "$gte": "{{params.dateRange.start}}T00:00:00.000Z",
+              "$lte": "{{params.dateRange.end}}T23:59:59.999Z"
+            },
+            "status": { "$in": ["completed", "shipped", "delivered"] },
+            "currency": "{{params.currency}}"
+          }
+        },
+        {
+          "$lookup": {
+            "from": "users",
+            "localField": "customerId",
+            "foreignField": "_id",
+            "as": "customer",
+            "pipeline": [
+              {
+                "$project": {
+                  "name": 1,
+                  "email": 1,
+                  "profile.country": 1
+                }
+              }
+            ]
+          }
+        },
+        {
+          "$unwind": "$customer"
+        },
+        {
+          "$addFields": {
+            "region": "$customer.profile.country",
+            "orderMonth": { "$dateToString": { "format": "%Y-%m", "date": "$orderDate" } },
+            "orderWeek": { "$dateToString": { "format": "%Y-W%U", "date": "$orderDate" } },
+            "orderDay": { "$dateToString": { "format": "%Y-%m-%d", "date": "$orderDate" } }
+          }
+        }
+      ]
+    },
+    {
+      "id": "calculateSummary",
+      "type": "aggregate",
+      "collection": "orders",
+      "pipeline": [
+        {
+          "$match": {
+            "orderDate": {
+              "$gte": "{{params.dateRange.start}}T00:00:00.000Z",
+              "$lte": "{{params.dateRange.end}}T23:59:59.999Z"
+            },
+            "status": { "$in": ["completed", "shipped", "delivered"] },
+            "currency": "{{params.currency}}"
+          }
+        },
+        {
+          "$group": {
+            "_id": null,
+            "totalRevenue": { "$sum": "$totalAmount" },
+            "totalOrders": { "$sum": 1 },
+            "uniqueCustomers": { "$addToSet": "$customerId" },
+            "averageOrderValue": { "$avg": "$totalAmount" }
+          }
+        },
+        {
+          "$project": {
+            "_id": 0,
+            "totalRevenue": 1,
+            "totalOrders": 1,
+            "averageOrderValue": 1,
+            "uniqueCustomers": { "$size": "$uniqueCustomers" }
+          }
+        }
+      ]
+    },
+    {
+      "id": "getTopProducts",
+      "type": "aggregate",
+      "collection": "orders",
+      "pipeline": [
+        {
+          "$match": {
+            "orderDate": {
+              "$gte": "{{params.dateRange.start}}T00:00:00.000Z",
+              "$lte": "{{params.dateRange.end}}T23:59:59.999Z"
+            },
+            "status": { "$in": ["completed", "shipped", "delivered"] }
+          }
+        },
+        {
+          "$unwind": "$items"
+        },
+        {
+          "$group": {
+            "_id": "$items.productId",
+            "productName": { "$first": "$items.name" },
+            "totalQuantity": { "$sum": "$items.quantity" },
+            "totalRevenue": { "$sum": "$items.subtotal" },
+            "orderCount": { "$sum": 1 }
+          }
+        },
+        {
+          "$sort": { "totalRevenue": -1 }
+        },
+        {
+          "$limit": 10
+        }
+      ]
+    },
+    {
+      "id": "getTopCustomers",
+      "type": "aggregate",
+      "collection": "orders",
+      "pipeline": [
+        {
+          "$match": {
+            "orderDate": {
+              "$gte": "{{params.dateRange.start}}T00:00:00.000Z",
+              "$lte": "{{params.dateRange.end}}T23:59:59.999Z"
+            },
+            "status": { "$in": ["completed", "shipped", "delivered"] }
+          }
+        },
+        {
+          "$lookup": {
+            "from": "users",
+            "localField": "customerId",
+            "foreignField": "_id",
+            "as": "customer"
+          }
+        },
+        {
+          "$unwind": "$customer"
+        },
+        {
+          "$group": {
+            "_id": "$customerId",
+            "customerName": { "$first": "$customer.name" },
+            "customerEmail": { "$first": "$customer.email" },
+            "totalSpent": { "$sum": "$totalAmount" },
+            "orderCount": { "$sum": 1 },
+            "averageOrderValue": { "$avg": "$totalAmount" }
+          }
+        },
+        {
+          "$sort": { "totalSpent": -1 }
+        },
+        {
+          "$limit": 10
+        }
+      ]
+    },
+    {
+      "id": "getTrends",
+      "type": "aggregate", 
+      "collection": "orders",
+      "pipeline": [
+        {
+          "$match": {
+            "orderDate": {
+              "$gte": "{{params.dateRange.start}}T00:00:00.000Z",
+              "$lte": "{{params.dateRange.end}}T23:59:59.999Z"
+            },
+            "status": { "$in": ["completed", "shipped", "delivered"] }
+          }
+        },
+        {
+          "$group": {
+            "_id": {
+              "$dateToString": {
+                "format": "{{params.groupBy === 'day' ? '%Y-%m-%d' : params.groupBy === 'week' ? '%Y-W%U' : params.groupBy === 'month' ? '%Y-%m' : '%Y-Q%q'}}",
+                "date": "$orderDate"
+              }
+            },
+            "revenue": { "$sum": "$totalAmount" },
+            "orders": { "$sum": 1 },
+            "uniqueCustomers": { "$addToSet": "$customerId" }
+          }
+        },
+        {
+          "$project": {
+            "period": "$_id",
+            "revenue": 1,
+            "orders": 1,
+            "customers": { "$size": "$uniqueCustomers" }
+          }
+        },
+        {
+          "$sort": { "period": 1 }
+        }
+      ]
+    },
+    {
+      "id": "getRegionalBreakdown",
+      "type": "aggregate",
+      "collection": "orders",
+      "pipeline": [
+        {
+          "$match": {
+            "orderDate": {
+              "$gte": "{{params.dateRange.start}}T00:00:00.000Z",
+              "$lte": "{{params.dateRange.end}}T23:59:59.999Z"
+            },
+            "status": { "$in": ["completed", "shipped", "delivered"] }
+          }
+        },
+        {
+          "$lookup": {
+            "from": "users",
+            "localField": "customerId",
+            "foreignField": "_id",
+            "as": "customer"
+          }
+        },
+        {
+          "$unwind": "$customer"
+        },
+        {
+          "$group": {
+            "_id": "$customer.profile.country",
+            "revenue": { "$sum": "$totalAmount" },
+            "orders": { "$sum": 1 },
+            "customers": { "$addToSet": "$customerId" }
+          }
+        },
+        {
+          "$project": {
+            "region": "$_id",
+            "revenue": 1,
+            "orders": 1,
+            "customers": { "$size": "$customers" }
+          }
+        },
+        {
+          "$sort": { "revenue": -1 }
+        }
+      ]
+    },
+    {
+      "id": "processReportData",
+      "type": "transform",
+      "script": "processSalesReportData",
+      "input": {
+        "salesData": "{{steps.getSalesData.output}}",
+        "summary": "{{steps.calculateSummary.output}}",
+        "topProducts": "{{steps.getTopProducts.output}}",
+        "topCustomers": "{{steps.getTopCustomers.output}}",
+        "trends": "{{steps.getTrends.output}}",
+        "regions": "{{steps.getRegionalBreakdown.output}}",
+        "params": "{{params}}"
+      }
+    },
+    {
+      "id": "saveReport",
+      "type": "insertOne",
+      "collection": "reports",
+      "document": {
+        "type": "salesReport",
+        "reportId": "{{generateId()}}",
+        "generatedAt": "{{now}}",
+        "generatedBy": "{{user.id}}",
+        "parameters": {
+          "dateRange": "{{params.dateRange}}",
+          "groupBy": "{{params.groupBy}}",
+          "currency": "{{params.currency}}",
+          "regions": "{{params.regions}}"
+        },
+        "data": "{{steps.processReportData.output}}",
+        "summary": "{{steps.calculateSummary.output[0]}}",
+        "status": "completed",
+        "downloadUrl": "/reports/download/{{steps.processReportData.output.reportId}}"
+      }
+    }
+  ],
+  "hooks": {
+    "beforeExecution": ["validateDateRange", "checkReportPermissions"],
+    "afterExecution": ["sendReportNotification", "updateReportMetrics"],
+    "onError": ["logReportError", "sendErrorNotification"]
+  },
+  "caching": {
+    "enabled": true,
+    "ttl": 7200,
+    "key": "sales-report-{{params.dateRange.start}}-{{params.dateRange.end}}-{{params.groupBy}}-{{params.currency}}"
+  },
+  "timeout": 90000,
+  "tags": ["sales", "revenue", "analytics", "reporting"]
+}

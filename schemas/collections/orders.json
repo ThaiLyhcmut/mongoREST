@@ -1,0 +1,209 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Orders Collection",
+  "description": "Customer order information",
+  "type": "object",
+  "collection": "orders",
+  "indexes": [
+    { "fields": { "orderNumber": 1 }, "unique": true },
+    { "fields": { "customerId": 1, "orderDate": -1 } },
+    { "fields": { "status": 1, "orderDate": -1 } },
+    { "fields": { "orderDate": -1 } },
+    { "fields": { "totalAmount": -1 } }
+  ],
+  "properties": {
+    "_id": {
+      "type": "string",
+      "pattern": "^[0-9a-fA-F]{24}$",
+      "description": "MongoDB ObjectId"
+    },
+    "orderNumber": {
+      "type": "string",
+      "pattern": "^ORD-[0-9]{8}$",
+      "description": "Unique order number"
+    },
+    "customerId": {
+      "type": "string",
+      "pattern": "^[0-9a-fA-F]{24}$",
+      "description": "Reference to user _id"
+    },
+    "items": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "productId": {
+            "type": "string",
+            "pattern": "^[0-9a-fA-F]{24}$"
+          },
+          "sku": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "price": {
+            "type": "number",
+            "minimum": 0
+          },
+          "quantity": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "subtotal": {
+            "type": "number",
+            "minimum": 0
+          }
+        },
+        "required": ["productId", "sku", "name", "price", "quantity", "subtotal"]
+      },
+      "minItems": 1
+    },
+    "shippingAddress": {
+      "type": "object",
+      "properties": {
+        "fullName": { "type": "string" },
+        "address": { "type": "string" },
+        "city": { "type": "string" },
+        "state": { "type": "string" },
+        "zipCode": { "type": "string" },
+        "country": { "type": "string" },
+        "phone": { "type": "string" }
+      },
+      "required": ["fullName", "address", "city", "country"]
+    },
+    "billingAddress": {
+      "type": "object",
+      "properties": {
+        "fullName": { "type": "string" },
+        "address": { "type": "string" },
+        "city": { "type": "string" },
+        "state": { "type": "string" },
+        "zipCode": { "type": "string" },
+        "country": { "type": "string" }
+      },
+      "required": ["fullName", "address", "city", "country"]
+    },
+    "payment": {
+      "type": "object",
+      "properties": {
+        "method": {
+          "type": "string",
+          "enum": ["credit_card", "debit_card", "paypal", "bank_transfer", "cash_on_delivery"]
+        },
+        "status": {
+          "type": "string",
+          "enum": ["pending", "completed", "failed", "refunded"],
+          "default": "pending"
+        },
+        "transactionId": { "type": "string" },
+        "amount": { "type": "number", "minimum": 0 }
+      },
+      "required": ["method", "status", "amount"]
+    },
+    "subtotal": {
+      "type": "number",
+      "minimum": 0
+    },
+    "tax": {
+      "type": "number",
+      "minimum": 0,
+      "default": 0
+    },
+    "shipping": {
+      "type": "number",
+      "minimum": 0,
+      "default": 0
+    },
+    "discount": {
+      "type": "number",
+      "minimum": 0,
+      "default": 0
+    },
+    "totalAmount": {
+      "type": "number",
+      "minimum": 0
+    },
+    "currency": {
+      "type": "string",
+      "enum": ["USD", "VND", "EUR", "GBP"],
+      "default": "USD"
+    },
+    "status": {
+      "type": "string",
+      "enum": ["pending", "confirmed", "processing", "shipped", "delivered", "cancelled", "refunded"],
+      "default": "pending"
+    },
+    "orderDate": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "shippedDate": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "deliveredDate": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "notes": {
+      "type": "string",
+      "maxLength": 1000
+    },
+    "createdAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "updatedAt": {
+      "type": "string",
+      "format": "date-time"
+    }
+  },
+  "required": ["orderNumber", "customerId", "items", "shippingAddress", "payment", "subtotal", "totalAmount", "status", "orderDate"],
+  "additionalProperties": false,
+  "relationships": {
+    "customer": {
+      "type": "belongsTo",
+      "collection": "users",
+      "localField": "customerId",
+      "foreignField": "_id",
+      "alias": "customer",
+      "description": "Customer who placed this order",
+      "validation": {
+        "required": true
+      }
+    },
+    "items": {
+      "type": "hasMany",
+      "collection": "products",
+      "localField": "items.productId",
+      "foreignField": "_id",
+      "alias": "itemProducts",
+      "description": "Products in this order",
+      "isEmbedded": true,
+      "embeddedPath": "items"
+    }
+  },
+  "mongorest": {
+    "permissions": {
+      "read": ["user", "admin", "analyst", "dev"],
+      "create": ["admin", "user", "dev"],
+      "update": ["admin", "dev"],
+      "delete": ["admin"]
+    },
+    "rateLimits": {
+      "read": { "requests": 100, "window": "1h" },
+      "write": { "requests": 50, "window": "1h" }
+    },
+    "hooks": {
+      "beforeCreate": ["generateOrderNumber", "calculateTotals", "setTimestamps"],
+      "afterCreate": ["updateInventory", "sendOrderConfirmation"],
+      "beforeUpdate": ["setUpdatedAt"],
+      "afterUpdate": ["sendStatusNotification"]
+    },
+    "searchFields": ["orderNumber"],
+    "defaultSort": { "orderDate": -1 },
+    "defaultLimit": 25,
+    "maxLimit": 100
+  }
+}

@@ -1,0 +1,146 @@
+{
+  "name": "syncUsersWithCRM",
+  "version": "1.0.0",
+  "description": "Synchronize active users with external CRM system",
+  "category": "integrations",
+  "method": "POST",
+  "endpoint": "/functions/integrations/sync-users-crm",
+  "permissions": ["admin"],
+  "rateLimits": {
+    "requests": 2,
+    "window": "1h"
+  },
+  "input": {
+    "type": "object",
+    "properties": {
+      "lastSyncDate": {
+        "type": "string",
+        "format": "date-time",
+        "description": "Date of last synchronization (ISO format)"
+      },
+      "batchSize": {
+        "type": "integer",
+        "minimum": 10,
+        "maximum": 1000,
+        "default": 100,
+        "description": "Number of users to process in each batch"
+      },
+      "dryRun": {
+        "type": "boolean",
+        "default": false,
+        "description": "Preview changes without actually syncing"
+      }
+    },
+    "required": ["lastSyncDate"]
+  },
+  "output": {
+    "type": "object",
+    "properties": {
+      "syncId": { "type": "string" },
+      "processedUsers": { "type": "integer" },
+      "successCount": { "type": "integer" },
+      "failureCount": { "type": "integer" },
+      "crmResponse": { "type": "object" },
+      "previewData": { "type": "array" }
+    }
+  },
+  "steps": [
+    {
+      "id": "getModifiedUsers",
+      "type": "find",
+      "collection": "users",
+      "query": {
+        "updatedAt": { "$gte": "{{params.lastSyncDate}}" },
+        "status": { "$in": ["active", "suspended"] }
+      },
+      "options": {
+        "sort": { "updatedAt": 1 },
+        "limit": "{{params.batchSize}}"
+      }
+    },
+    {
+      "id": "transformForCRM",
+      "type": "transform",
+      "script": "userToCRMFormat",
+      "input": "{{steps.getModifiedUsers.output}}"
+    },
+    {
+      "id": "checkDryRun",
+      "type": "condition",
+      "condition": "{{params.dryRun}} === true",
+      "then": [
+        {
+          "id": "returnPreview",
+          "type": "transform",
+          "script": "createPreviewResponse",
+          "input": {
+            "users": "{{steps.getModifiedUsers.output}}",
+            "crmData": "{{steps.transformForCRM.output}}"
+          }
+        }
+      ],
+      "else": [
+        {
+          "id": "sendToCRM",
+          "type": "http",
+          "method": "POST",
+          "url": "https://api.crm-system.com/users/bulk-update",
+          "headers": {
+            "Authorization": "Bearer {{config.crmToken}}",
+            "Content-Type": "application/json"
+          },
+          "body": "{{steps.transformForCRM.output}}",
+          "timeout": 30000
+        },
+        {
+          "id": "updateSyncStatus",
+          "type": "updateMany",
+          "collection": "users",
+          "filter": {
+            "_id": { "$in": "{{steps.getModifiedUsers.output.map(u => u._id)}}" }
+          },
+          "update": {
+            "$set": {
+              "lastSyncedAt": "{{now}}",
+              "syncStatus": "synced"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "logSyncResult",
+      "type": "insertOne",
+      "collection": "sync_logs",
+      "document": {
+        "type": "crm_user_sync",
+        "timestamp": "{{now}}",
+        "usersProcessed": "{{steps.getModifiedUsers.output.length}}",
+        "syncId": "{{generateId()}}",
+        "parameters": "{{params}}",
+        "crmResponse": "{{steps.sendToCRM.output}}",
+        "success": "{{steps.sendToCRM.success}}",
+        "executedBy": "{{user.id}}",
+        "dryRun": "{{params.dryRun}}"
+      }
+    }
+  ],
+  "hooks": {
+    "beforeExecution": ["validateCRMConnection", "checkSyncPermissions"],
+    "afterExecution": ["sendSyncNotification", "updateMetrics"],
+    "onError": ["logSyncError", "sendErrorAlert"]
+  },
+  "errorHandling": {
+    "strategy": "rollback",
+    "rollbackSteps": ["updateSyncStatus"],
+    "retryCount": 2,
+    "retryDelay": 5000,
+    "notifyOnError": ["admin@company.com"]
+  },
+  "caching": {
+    "enabled": false,
+    "reason": "Real-time sync data should not be cached"
+  },
+  "timeout": 120000,
+  "tags": ["sync", "crm", "integration", "bulk-operation"]
+}

@@ -1,0 +1,126 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Product Reviews Collection",
+  "description": "Customer reviews for products",
+  "type": "object",
+  "collection": "product_reviews",
+  "indexes": [
+    { "fields": { "productId": 1, "createdAt": -1 } },
+    { "fields": { "userId": 1, "createdAt": -1 } },
+    { "fields": { "rating": -1 } },
+    { "fields": { "status": 1, "createdAt": -1 } },
+    { "fields": { "productId": 1, "userId": 1 }, "unique": true }
+  ],
+  "properties": {
+    "_id": {
+      "type": "string",
+      "pattern": "^[0-9a-fA-F]{24}$",
+      "description": "MongoDB ObjectId"
+    },
+    "productId": {
+      "type": "string",
+      "pattern": "^[0-9a-fA-F]{24}$",
+      "description": "Reference to product _id"
+    },
+    "userId": {
+      "type": "string",
+      "pattern": "^[0-9a-fA-F]{24}$",
+      "description": "Reference to user _id"
+    },
+    "rating": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 5,
+      "description": "Review rating from 1 to 5 stars"
+    },
+    "title": {
+      "type": "string",
+      "minLength": 5,
+      "maxLength": 200,
+      "description": "Review title"
+    },
+    "content": {
+      "type": "string",
+      "minLength": 10,
+      "maxLength": 2000,
+      "description": "Review content"
+    },
+    "verified": {
+      "type": "boolean",
+      "default": false,
+      "description": "Whether this review is from a verified purchase"
+    },
+    "helpful": {
+      "type": "object",
+      "properties": {
+        "yes": { "type": "integer", "minimum": 0, "default": 0 },
+        "no": { "type": "integer", "minimum": 0, "default": 0 }
+      },
+      "description": "Helpful votes"
+    },
+    "status": {
+      "type": "string",
+      "enum": ["pending", "approved", "rejected", "spam"],
+      "default": "pending"
+    },
+    "images": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "format": "uri"
+      },
+      "maxItems": 5,
+      "description": "Review images"
+    },
+    "createdAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "updatedAt": {
+      "type": "string",
+      "format": "date-time"
+    }
+  },
+  "required": ["productId", "userId", "rating", "title", "content"],
+  "additionalProperties": false,
+  "relationships": {
+    "product": {
+      "type": "belongsTo",
+      "collection": "products",
+      "localField": "productId",
+      "foreignField": "_id",
+      "alias": "product",
+      "description": "Product being reviewed"
+    },
+    "user": {
+      "type": "belongsTo",
+      "collection": "users",
+      "localField": "userId",
+      "foreignField": "_id",
+      "alias": "user",
+      "description": "User who wrote the review"
+    }
+  },
+  "mongorest": {
+    "permissions": {
+      "read": ["user", "admin", "analyst", "dev"],
+      "create": ["user", "admin", "dev"],
+      "update": ["admin", "dev"],
+      "delete": ["admin", "dev"]
+    },
+    "rateLimits": {
+      "read": { "requests": 200, "window": "1h" },
+      "write": { "requests": 20, "window": "1h" }
+    },
+    "hooks": {
+      "beforeCreate": ["checkVerifiedPurchase", "setTimestamps"],
+      "afterCreate": ["updateProductRating", "sendNotification"],
+      "beforeUpdate": ["setUpdatedAt"],
+      "afterUpdate": ["updateProductRating"]
+    },
+    "searchFields": ["title", "content"],
+    "defaultSort": { "createdAt": -1 },
+    "defaultLimit": 25,
+    "maxLimit": 100
+  }
+}
