@@ -1,14 +1,13 @@
 // CRUD Routes - Auto-generated based on collection schemas
 async function crudRoutes(fastify, options) {
-  const { schemaLoader, dbManager, authManager, validationManager, crudGenerator } = fastify;
+  console.log('Inside crudRoutes, fastify.schemaLoader:', fastify.schemaLoader);
+  const { authManager, validationManager, crudGenerator, schemaLoader, dbManager } = fastify;
 
-  // Register authentication and authorization decorators
-  fastify.decorate('authenticate', authManager.authenticate());
-  fastify.decorate('authorizeCollection', authManager.authorizeCollection.bind(authManager));
-  fastify.decorate('validateMethodOperation', validationManager.validateMethodOperation());
-  
-  // Script parsing middleware is already registered in server.js
-  // We can use it here via fastify decorators
+  // Decorate methods for use in preHandlers
+  // fastify.decorate('authenticate', authManager.authenticate.bind(authManager)); // Removed
+  fastify.decorate('validateMethodOperation', validationManager.validateMethodOperation.bind(validationManager));
+
+  const collectionNames = schemaLoader.getCollectionNames();
 
   // Register CRUD routes for all collections
   await crudGenerator.registerRoutes(fastify);
@@ -61,10 +60,10 @@ async function crudRoutes(fastify, options) {
   }, async (request, reply) => {
     try {
       const collections = [];
-      
+
       for (const [name, schema] of schemaLoader.schemas) {
         const baseUrl = `/crud/${name}`;
-        
+
         collections.push({
           name,
           title: schema.title,
@@ -139,7 +138,7 @@ async function crudRoutes(fastify, options) {
     try {
       const { collection } = request.params;
       const schema = schemaLoader.getSchema(collection);
-      
+
       if (!schema) {
         return reply.code(404).send({
           error: 'Collection not found',
@@ -183,7 +182,7 @@ async function crudRoutes(fastify, options) {
     try {
       const { collection: collectionName } = request.params;
       const schema = schemaLoader.getSchema(collectionName);
-      
+
       if (!schema) {
         return reply.code(404).send({
           error: 'Collection not found',
@@ -192,7 +191,7 @@ async function crudRoutes(fastify, options) {
       }
 
       const collection = dbManager.collection(collectionName);
-      
+
       // Get collection statistics
       const [totalDocuments, indexes, sampleDocuments] = await Promise.all([
         collection.countDocuments(),
@@ -253,7 +252,7 @@ async function crudRoutes(fastify, options) {
               type: 'object',
               properties: {
                 collection: { type: 'string' },
-                operation: { 
+                operation: {
                   type: 'string',
                   enum: ['insertOne', 'insertMany', 'updateOne', 'updateMany', 'deleteOne', 'deleteMany']
                 },
@@ -279,13 +278,15 @@ async function crudRoutes(fastify, options) {
       // Validate permissions for all operations first
       for (const op of operations) {
         const canAccess = authManager.canAccessCollection(
-          request.user, 
-          op.collection, 
-          op.operation.includes('insert') ? 'create' : 
-          op.operation.includes('update') ? 'update' : 
-          op.operation.includes('delete') ? 'delete' : 'read'
+          request.user,
+          op.collection,
+          op.operation.includes('insert')
+            ? 'create'
+            : op.operation.includes('update')
+              ? 'update'
+              : op.operation.includes('delete') ? 'delete' : 'read'
         );
-        
+
         if (!canAccess) {
           return reply.code(403).send({
             error: 'Bulk operation denied',
@@ -363,7 +364,7 @@ async function crudRoutes(fastify, options) {
   });
 
   // Helper method for bulk operations
-  this.executeBulkOperation = async (operation, session = null) => {
+  const executeBulkOperation = async (operation, session = null) => {
     const collection = dbManager.collection(operation.collection);
     const options = session ? { session } : {};
 
@@ -455,4 +456,4 @@ async function crudRoutes(fastify, options) {
   });
 }
 
-module.exports = crudRoutes;
+export default crudRoutes;

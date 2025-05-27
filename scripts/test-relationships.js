@@ -18,7 +18,7 @@ class RelationshipTester {
     try {
       // For testing, we'll use a simple dev token
       // In production, this would be obtained through proper authentication
-      this.testToken = 'Bearer ' + Buffer.from(JSON.stringify({
+      this.testToken = `Bearer ${Buffer.from(JSON.stringify({
         sub: 'test_user_12345',
         role: 'admin',
         permissions: ['*'],
@@ -28,8 +28,8 @@ class RelationshipTester {
         exp: Math.floor(Date.now() / 1000) + 3600,
         iss: 'mongorest',
         aud: 'mongorest-api'
-      })).toString('base64');
-      
+      })).toString('base64')}`;
+
       console.log('🔐 Using test authentication token');
     } catch (error) {
       console.error('❌ Authentication failed:', error.message);
@@ -67,25 +67,25 @@ class RelationshipTester {
   async testAPI(name, method, endpoint, expectedFeatures = []) {
     console.log(`\n🧪 Testing: ${name}`);
     console.log(`   ${method} ${endpoint}`);
-    
+
     try {
       const startTime = Date.now();
       const result = await this.makeRequest(method, endpoint);
       const duration = Date.now() - startTime;
-      
+
       // Check if response has expected features
-      let featuresFound = [];
+      const featuresFound = [];
       if (expectedFeatures.includes('relationships') && result.data && Array.isArray(result.data) && result.data.length > 0) {
-        const hasRelationships = Object.keys(result.data[0]).some(key => 
+        const hasRelationships = Object.keys(result.data[0]).some(key =>
           typeof result.data[0][key] === 'object' && result.data[0][key] !== null
         );
         if (hasRelationships) featuresFound.push('relationships');
       }
-      
+
       if (expectedFeatures.includes('filtering') && result.meta?.query) {
         featuresFound.push('filtering');
       }
-      
+
       if (expectedFeatures.includes('aggregation') && result.meta?.operation === 'aggregate') {
         featuresFound.push('aggregation');
       }
@@ -134,23 +134,23 @@ class RelationshipTester {
 
   async runBasicTests() {
     console.log('\n🔄 Running Basic CRUD Tests...');
-    
+
     // Test basic collection access
     await this.testAPI(
-      'List Users', 
-      'GET', 
+      'List Users',
+      'GET',
       '/crud/users?limit=3'
     );
-    
+
     await this.testAPI(
-      'List Products', 
-      'GET', 
+      'List Products',
+      'GET',
       '/crud/products?limit=3'
     );
-    
+
     await this.testAPI(
-      'List Orders', 
-      'GET', 
+      'List Orders',
+      'GET',
       '/crud/orders?limit=3'
     );
   }
@@ -166,10 +166,10 @@ class RelationshipTester {
       ['relationships', 'aggregation']
     );
 
-    // Test hasMany relationships  
+    // Test hasMany relationships
     await this.testAPI(
       'Users with Orders (hasMany)',
-      'GET', 
+      'GET',
       '/crud/users?select=name,email,profile,orders(orderNumber,totalAmount,status)',
       ['relationships', 'aggregation']
     );
@@ -310,7 +310,7 @@ class RelationshipTester {
 
   async testHealthCheck() {
     console.log('\n❤️  Testing API Health...');
-    
+
     try {
       const health = await this.makeRequest('GET', '/health');
       console.log('   ✅ API is healthy');
@@ -324,21 +324,21 @@ class RelationshipTester {
 
   async testAPIInfo() {
     console.log('\n📋 Getting API Information...');
-    
+
     try {
       const info = await this.makeRequest('GET', '/');
       console.log(`   🏷️  Service: ${info.service}`);
       console.log(`   📦 Version: ${info.version}`);
       console.log(`   📚 Collections: ${info.collections?.length || 0}`);
       console.log(`   ⚙️  Functions: ${info.functions?.length || 0}`);
-      
+
       if (info.features) {
         const features = Object.entries(info.features)
           .filter(([, enabled]) => enabled)
           .map(([feature]) => feature);
         console.log(`   🔧 Features: ${features.join(', ')}`);
       }
-      
+
       return info;
     } catch (error) {
       console.log('   ❌ Failed to get API info:', error.message);
@@ -349,23 +349,23 @@ class RelationshipTester {
   printSummary() {
     console.log('\n📊 Test Summary');
     console.log('='.repeat(50));
-    
+
     const total = this.results.length;
     const passed = this.results.filter(r => r.success).length;
     const failed = total - passed;
-    
+
     console.log(`   Total Tests: ${total}`);
     console.log(`   ✅ Passed: ${passed}`);
     console.log(`   ❌ Failed: ${failed}`);
     console.log(`   📈 Success Rate: ${Math.round((passed / total) * 100)}%`);
-    
+
     if (passed > 0) {
       const avgDuration = Math.round(
         this.results.filter(r => r.success).reduce((sum, r) => sum + r.duration, 0) / passed
       );
       console.log(`   ⏱️  Average Response Time: ${avgDuration}ms`);
     }
-    
+
     // Feature summary
     const featureCounts = {};
     this.results.forEach(r => {
@@ -373,14 +373,14 @@ class RelationshipTester {
         featureCounts[feature] = (featureCounts[feature] || 0) + 1;
       });
     });
-    
+
     if (Object.keys(featureCounts).length > 0) {
       console.log('\n🔧 Feature Usage:');
       Object.entries(featureCounts).forEach(([feature, count]) => {
         console.log(`   ${feature}: ${count} test(s)`);
       });
     }
-    
+
     // Failed tests details
     if (failed > 0) {
       console.log('\n❌ Failed Tests:');
@@ -388,18 +388,18 @@ class RelationshipTester {
         console.log(`   • ${r.name}: ${r.error}`);
       });
     }
-    
-    console.log('\n' + '='.repeat(50));
+
+    console.log(`\n${'='.repeat(50)}`);
   }
 
   async runAllTests() {
     console.log('🚀 MongoREST Relationship System Tests');
     console.log('='.repeat(50));
-    
+
     try {
       // Setup
       await this.authenticate();
-      
+
       // Check API health first
       const isHealthy = await this.testHealthCheck();
       if (!isHealthy) {
@@ -408,7 +408,7 @@ class RelationshipTester {
 
       // Get API info
       await this.testAPIInfo();
-      
+
       // Run test suites
       await this.runBasicTests();
       await this.runRelationshipTests();
@@ -416,7 +416,6 @@ class RelationshipTester {
       await this.runAdvancedTests();
       await this.runPerformanceTests();
       await this.runErrorTests();
-      
     } catch (error) {
       console.error('\n💥 Test execution failed:', error);
     } finally {
@@ -428,10 +427,10 @@ class RelationshipTester {
 // Helper function to run specific test
 async function runSpecificTest(testName) {
   const tester = new RelationshipTester();
-  
+
   try {
     await tester.authenticate();
-    
+
     switch (testName) {
       case 'basic':
         await tester.runBasicTests();
@@ -455,7 +454,7 @@ async function runSpecificTest(testName) {
         console.log('Available tests: basic, relationships, filtering, advanced, performance, errors');
         return;
     }
-    
+
     tester.printSummary();
   } catch (error) {
     console.error('Test failed:', error);
@@ -465,7 +464,7 @@ async function runSpecificTest(testName) {
 // Run tests if this file is executed directly
 if (require.main === module) {
   const testType = process.argv[2];
-  
+
   if (testType && testType !== 'all') {
     runSpecificTest(testType);
   } else {

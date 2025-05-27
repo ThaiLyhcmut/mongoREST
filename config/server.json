@@ -8,7 +8,7 @@
   },
   "logging": {
     "level": "${LOG_LEVEL:-info}",
-    "prettyPrint": "${NODE_ENV:-development}" === "development",
+    "prettyPrint": true,
     "serializers": {
       "req": "pino-std-serializers.req",
       "res": "pino-std-serializers.res"

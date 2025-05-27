@@ -1,5 +1,3 @@
-const { ObjectId } = require('mongodb');
-
 /**
  * RelationshipQueryParser - Parse PostgREST-style relationship queries
  * Supports syntax like: "id,title,author(*),category(name,slug),comments(content,user:userId(name))"
@@ -22,10 +20,10 @@ class RelationshipQueryParser {
 
     const selectFields = this.parseSelectFields(selectParam);
     const pipeline = this.buildAggregationPipeline(collection, selectFields);
-    
+
     return {
       fields: selectFields,
-      pipeline: pipeline,
+      pipeline,
       hasRelationships: selectFields.some(f => f.type === 'relationship')
     };
   }
@@ -43,7 +41,7 @@ class RelationshipQueryParser {
 
     for (let i = 0; i < selectParam.length; i++) {
       const char = selectParam[i];
-      
+
       if (char === '(') {
         depth++;
         inParens = true;
@@ -57,14 +55,14 @@ class RelationshipQueryParser {
         currentField = '';
         continue;
       }
-      
+
       currentField += char;
     }
-    
+
     if (currentField.trim()) {
       fields.push(this.parseField(currentField.trim()));
     }
-    
+
     return fields;
   }
 
@@ -81,11 +79,11 @@ class RelationshipQueryParser {
     // "author:authorId(name,email)" -> relationship with explicit foreign key
     // "commentCount:comments!count" -> aggregated relationship
     // "topComments:comments!order.createdAt.desc!limit.5" -> relationship with modifiers
-    
+
     const relationshipMatch = fieldStr.match(/^(\w+)(?::(\w+))?\(([^)]*)\)(?:(![\w.!]+)*)$/);
     const aggregateMatch = fieldStr.match(/^(\w+):(\w+)!(count|sum|avg|min|max)(?:\(([^)]*)\))?$/);
     const modifierMatch = fieldStr.match(/^(\w+):(\w+)(?:\(([^)]*)\))?(![\w.!]+)+$/);
-    
+
     if (aggregateMatch) {
       const [, alias, relationName, aggregateType, aggregateField] = aggregateMatch;
       return {
@@ -97,7 +95,7 @@ class RelationshipQueryParser {
         subFields: []
       };
     }
-    
+
     if (modifierMatch) {
       const [, alias, relationName, subFieldsStr, modifiersStr] = modifierMatch;
       const modifiers = this.parseModifiers(modifiersStr);
@@ -109,11 +107,11 @@ class RelationshipQueryParser {
         modifiers
       };
     }
-    
+
     if (relationshipMatch) {
       const [, alias, explicitField, subFields, modifiersStr] = relationshipMatch;
       const modifiers = modifiersStr ? this.parseModifiers(modifiersStr) : {};
-      
+
       return {
         type: 'relationship',
         alias,
@@ -122,7 +120,7 @@ class RelationshipQueryParser {
         modifiers
       };
     }
-    
+
     return {
       type: 'field',
       name: fieldStr
@@ -137,7 +135,7 @@ class RelationshipQueryParser {
   parseModifiers(modifiersStr) {
     const modifiers = {};
     const parts = modifiersStr.split('!').filter(Boolean);
-    
+
     for (const part of parts) {
       if (part.startsWith('order.')) {
         const [, field, direction] = part.split('.');
@@ -150,7 +148,7 @@ class RelationshipQueryParser {
         modifiers.joinType = 'inner';
       }
     }
-    
+
     return modifiers;
   }
 
@@ -193,7 +191,7 @@ class RelationshipQueryParser {
 
     // Add lookup stages
     pipeline.push(...lookupStages);
-    
+
     // Add project stage if we have specific field selection
     if (Object.keys(projectStage).length > 0) {
       pipeline.push({ $project: projectStage });
@@ -242,7 +240,7 @@ class RelationshipQueryParser {
             pipeline: this.buildSubPipeline(field.subFields, relationship.collection, field.modifiers)
           }
         });
-        
+
         // Convert array to object for belongsTo
         stages.push({
           $addFields: {
@@ -252,18 +250,18 @@ class RelationshipQueryParser {
         break;
 
       case 'hasMany':
-        let pipeline = this.buildSubPipeline(field.subFields, relationship.collection, field.modifiers);
-        
+        const pipeline = this.buildSubPipeline(field.subFields, relationship.collection, field.modifiers);
+
         // Apply default filters if defined
         if (relationship.defaultFilters) {
           pipeline.unshift({ $match: relationship.defaultFilters });
         }
-        
+
         // Apply default sort if no sort specified
         if (!field.modifiers?.sort && relationship.defaultSort) {
           pipeline.push({ $sort: relationship.defaultSort });
         }
-        
+
         // Apply pagination limits
         if (relationship.pagination) {
           const limit = field.modifiers?.limit || relationship.pagination.defaultLimit;
@@ -300,7 +298,7 @@ class RelationshipQueryParser {
   buildManyToManyStages(relationship, field) {
     const stages = [];
     const junctionAlias = `${field.alias}_junction`;
-    
+
     // First lookup to junction table
     stages.push({
       $lookup: {
@@ -310,7 +308,7 @@ class RelationshipQueryParser {
         as: junctionAlias
       }
     });
-    
+
     // Second lookup to target collection
     stages.push({
       $lookup: {
@@ -321,7 +319,7 @@ class RelationshipQueryParser {
         pipeline: this.buildSubPipeline(field.subFields, relationship.collection, field.modifiers)
       }
     });
-    
+
     // Remove junction field
     stages.push({
       $project: {
@@ -342,7 +340,7 @@ class RelationshipQueryParser {
   buildAggregateStage(relationship, field, collection) {
     const stages = [];
     const tempAlias = `${field.alias}_temp`;
-    
+
     // Build lookup stage
     stages.push({
       $lookup: {
@@ -352,7 +350,7 @@ class RelationshipQueryParser {
         as: tempAlias
       }
     });
-    
+
     // Build aggregation based on type
     let aggregateExpression;
     switch (field.aggregateType) {
@@ -374,20 +372,20 @@ class RelationshipQueryParser {
       default:
         aggregateExpression = { $size: `$${tempAlias}` };
     }
-    
+
     // Add computed field and remove temp field
     stages.push({
       $addFields: {
         [field.alias]: aggregateExpression
       }
     });
-    
+
     stages.push({
       $project: {
         [tempAlias]: 0
       }
     });
-    
+
     return stages;
   }
 
@@ -401,7 +399,7 @@ class RelationshipQueryParser {
   buildSubPipeline(subFields, collection, modifiers = {}) {
     if (!subFields || subFields.length === 0 || subFields[0] === '*') {
       const pipeline = [];
-      
+
       // Apply modifiers
       if (modifiers.sort) {
         pipeline.push({ $sort: modifiers.sort });
@@ -412,14 +410,14 @@ class RelationshipQueryParser {
       if (modifiers.limit) {
         pipeline.push({ $limit: modifiers.limit });
       }
-      
+
       return pipeline;
     }
 
     const pipeline = [];
     const projectStage = {};
     const nestedLookups = [];
-    
+
     for (const subField of subFields) {
       if (subField.type === 'field') {
         projectStage[subField.name] = 1;
@@ -437,7 +435,7 @@ class RelationshipQueryParser {
 
     // Add nested lookups first
     pipeline.push(...nestedLookups);
-    
+
     // Apply modifiers
     if (modifiers.sort) {
       pipeline.push({ $sort: modifiers.sort });
@@ -476,7 +474,7 @@ class RelationshipQueryParser {
       if (field.type === 'relationship' || field.type === 'aggregate') {
         const relationName = field.relationName || field.alias;
         const relationship = schema.relationships?.[relationName];
-        
+
         if (!relationship) {
           errors.push(`Unknown relationship: ${relationName} in collection ${collection}`);
           continue;
@@ -514,7 +512,7 @@ class RelationshipQueryParser {
   validateSubFields(subFields, collection) {
     const errors = [];
     const targetSchema = this.schemas.get(collection);
-    
+
     if (!targetSchema) {
       return [`Target collection not found: ${collection}`];
     }
@@ -564,4 +562,4 @@ class RelationshipQueryParser {
   }
 }
 
-module.exports = RelationshipQueryParser;
+export default RelationshipQueryParser;

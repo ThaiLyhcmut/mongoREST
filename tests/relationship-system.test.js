@@ -11,10 +11,10 @@ describe('Relationship System Tests', () => {
   beforeAll(async () => {
     // Initialize schema loader with test schemas
     schemaLoader = new SchemaLoader();
-    
+
     // Mock schemas for testing
     const mockSchemas = new Map();
-    
+
     // Users schema
     mockSchemas.set('users', {
       title: 'Users',
@@ -34,7 +34,7 @@ describe('Relationship System Tests', () => {
         }
       }
     });
-    
+
     // Orders schema
     mockSchemas.set('orders', {
       title: 'Orders',
@@ -55,7 +55,7 @@ describe('Relationship System Tests', () => {
         }
       }
     });
-    
+
     // Products schema
     mockSchemas.set('products', {
       title: 'Products',
@@ -78,7 +78,7 @@ describe('Relationship System Tests', () => {
         }
       }
     });
-    
+
     // Categories schema
     mockSchemas.set('categories', {
       title: 'Categories',
@@ -89,9 +89,9 @@ describe('Relationship System Tests', () => {
         slug: { type: 'string' }
       }
     });
-    
+
     schemaLoader.schemas = mockSchemas;
-    
+
     relationshipParser = new RelationshipQueryParser(schemaLoader);
     filterParser = new RelationshipFilterParser(schemaLoader);
   });
@@ -152,7 +152,7 @@ describe('Relationship System Tests', () => {
       it('should build pipeline for belongsTo relationship', () => {
         const selectQuery = relationshipParser.parseSelectQuery('orders', 'orderNumber,customer(name,email)');
         expect(selectQuery.pipeline).toHaveLength(3);
-        
+
         // Should have lookup, addFields, and project stages
         expect(selectQuery.pipeline[0]).toHaveProperty('$lookup');
         expect(selectQuery.pipeline[0].$lookup.from).toBe('users');
@@ -164,7 +164,7 @@ describe('Relationship System Tests', () => {
       it('should build pipeline for hasMany relationship', () => {
         const selectQuery = relationshipParser.parseSelectQuery('users', 'name,orders(orderNumber,totalAmount)');
         expect(selectQuery.pipeline).toHaveLength(2);
-        
+
         // Should have lookup and project stages
         expect(selectQuery.pipeline[0]).toHaveProperty('$lookup');
         expect(selectQuery.pipeline[0].$lookup.from).toBe('orders');
@@ -175,7 +175,7 @@ describe('Relationship System Tests', () => {
       it('should build pipeline for manyToMany relationship', () => {
         const selectQuery = relationshipParser.parseSelectQuery('products', 'name,categories(name,slug)');
         expect(selectQuery.pipeline.length).toBeGreaterThan(2);
-        
+
         // Should have multiple lookup stages for many-to-many
         const lookupStages = selectQuery.pipeline.filter(stage => stage.$lookup);
         expect(lookupStages.length).toBeGreaterThan(1);
@@ -211,7 +211,7 @@ describe('Relationship System Tests', () => {
           name: 'eq.John',
           age: 'gte.18'
         });
-        
+
         expect(result.filters).toEqual({
           name: { $eq: 'John' },
           age: { $gte: 18 }
@@ -224,7 +224,7 @@ describe('Relationship System Tests', () => {
           'orders.status': 'eq.completed',
           'orders.totalAmount': 'gte.100'
         });
-        
+
         expect(Object.keys(result.filters)).toHaveLength(0);
         expect(result.relationshipFilters.orders).toEqual({
           status: { $eq: 'completed' },
@@ -238,7 +238,7 @@ describe('Relationship System Tests', () => {
           'orders.status': 'eq.completed',
           email: 'like.*@example.com'
         });
-        
+
         expect(result.filters).toEqual({
           name: { $eq: 'John' },
           email: { $regex: '.*@example\\.com', $options: 'i' }
@@ -339,16 +339,16 @@ describe('Relationship System Tests', () => {
   describe('Integration Tests', () => {
     it('should handle complex relationship queries with filters', () => {
       const selectQuery = relationshipParser.parseSelectQuery(
-        'users', 
+        'users',
         'name,email,orders(orderNumber,totalAmount,customer(name))'
       );
-      
+
       const { filters, relationshipFilters } = filterParser.parseFilters('users', {
         name: 'like.John*',
         'orders.status': 'eq.completed',
         'orders.totalAmount': 'gte.100'
       });
-      
+
       expect(selectQuery.hasRelationships).toBe(true);
       expect(selectQuery.fields).toHaveLength(3);
       expect(filters).toEqual({
@@ -369,13 +369,13 @@ describe('Relationship System Tests', () => {
         { orders: { status: { $eq: 'completed' } } },
         {}
       );
-      
+
       expect(pipeline.length).toBeGreaterThan(0);
-      
+
       // Should contain match stage for direct filters
       const matchStages = pipeline.filter(stage => stage.$match);
       expect(matchStages).toHaveLength(1);
-      
+
       // Should contain lookup stages for relationships
       const lookupStages = pipeline.filter(stage => stage.$lookup);
       expect(lookupStages.length).toBeGreaterThan(0);

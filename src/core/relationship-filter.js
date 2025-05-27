@@ -28,7 +28,7 @@ class RelationshipFilterParser {
         // Relationship filter: "category.name=eq.Tech"
         const [relationPath, ...fieldParts] = key.split('.');
         const field = fieldParts.join('.');
-        
+
         if (!relationshipFilters[relationPath]) {
           relationshipFilters[relationPath] = {};
         }
@@ -42,9 +42,9 @@ class RelationshipFilterParser {
       }
     }
 
-    return { 
-      filters, 
-      relationshipFilters, 
+    return {
+      filters,
+      relationshipFilters,
       specialFilters,
       hasRelationshipFilters: Object.keys(relationshipFilters).length > 0
     };
@@ -67,7 +67,7 @@ class RelationshipFilterParser {
     }
 
     const [, operator, operand] = operatorMatch;
-    
+
     switch (operator) {
       case 'eq':
         return { $eq: this.parseValue(operand) };
@@ -97,9 +97,9 @@ class RelationshipFilterParser {
       case 'null':
         return operand === 'true' ? { $eq: null } : { $ne: null };
       case 'empty':
-        return operand === 'true' ? 
-          { $or: [{ $eq: null }, { $eq: '' }, { $size: 0 }] } :
-          { $and: [{ $ne: null }, { $ne: '' }, { $not: { $size: 0 } }] };
+        return operand === 'true'
+          ? { $or: [{ $eq: null }, { $eq: '' }, { $size: 0 }] }
+          : { $and: [{ $ne: null }, { $ne: '' }, { $not: { $size: 0 } }] };
       default:
         return { $eq: value };
     }
@@ -113,28 +113,28 @@ class RelationshipFilterParser {
   parseValue(value) {
     // Handle null
     if (value === 'null') return null;
-    
+
     // Handle boolean
     if (value === 'true') return true;
     if (value === 'false') return false;
-    
+
     // Handle numbers
     if (/^\d+$/.test(value)) return parseInt(value);
     if (/^\d+\.\d+$/.test(value)) return parseFloat(value);
-    
+
     // Handle ObjectId pattern
     if (/^[0-9a-fA-F]{24}$/.test(value)) return value;
-    
+
     // Handle dates (ISO format)
     if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/.test(value)) {
       return new Date(value);
     }
-    
+
     // Handle date (simple format)
     if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
-      return new Date(value + 'T00:00:00.000Z');
+      return new Date(`${value}T00:00:00.000Z`);
     }
-    
+
     return value;
   }
 
@@ -147,10 +147,10 @@ class RelationshipFilterParser {
     if (!value.startsWith('(') || !value.endsWith(')')) {
       return [this.parseValue(value)];
     }
-    
+
     const innerValue = value.slice(1, -1);
     if (!innerValue) return [];
-    
+
     return innerValue.split(',').map(v => this.parseValue(v.trim()));
   }
 
@@ -213,11 +213,11 @@ class RelationshipFilterParser {
   buildTextSearchStage(collection, searchTerm, searchFields) {
     const schema = this.schemas.get(collection);
     const mongorestConfig = schema?.mongorest || {};
-    
+
     // Use specified search fields or default from schema
-    const fieldsToSearch = searchFields ? 
-      searchFields.split(',').map(f => f.trim()) : 
-      mongorestConfig.searchFields || [];
+    const fieldsToSearch = searchFields
+      ? searchFields.split(',').map(f => f.trim())
+      : mongorestConfig.searchFields || [];
 
     if (fieldsToSearch.length === 0) {
       // Try text index search if available
@@ -245,7 +245,7 @@ class RelationshipFilterParser {
 
     for (const [relationPath, relationFilter] of Object.entries(relationshipFilters)) {
       const relationship = schema.relationships[relationPath];
-      
+
       if (relationship) {
         pipeline = this.addRelationshipFilter(pipeline, relationship, relationFilter, relationPath);
       }
@@ -264,7 +264,7 @@ class RelationshipFilterParser {
    */
   addRelationshipFilter(pipeline, relationship, filter, relationPath) {
     // Find existing lookup stage or create new one
-    const lookupIndex = pipeline.findIndex(stage => 
+    const lookupIndex = pipeline.findIndex(stage =>
       stage.$lookup && stage.$lookup.as === relationPath
     );
 
@@ -314,7 +314,7 @@ class RelationshipFilterParser {
             pipeline: [{ $match: filter }]
           }
         });
-        
+
         // Convert array to object
         stages.push({
           $addFields: {
@@ -337,7 +337,7 @@ class RelationshipFilterParser {
 
       case 'manyToMany':
         const junctionAlias = `${relationPath}_junction`;
-        
+
         // First lookup to junction table
         stages.push({
           $lookup: {
@@ -347,7 +347,7 @@ class RelationshipFilterParser {
             as: junctionAlias
           }
         });
-        
+
         // Second lookup to target collection with filter
         stages.push({
           $lookup: {
@@ -358,7 +358,7 @@ class RelationshipFilterParser {
             pipeline: [{ $match: filter }]
           }
         });
-        
+
         // Remove junction field
         stages.push({
           $project: {
@@ -380,7 +380,7 @@ class RelationshipFilterParser {
   validateFilters(collection, filterParams) {
     const errors = [];
     const schema = this.schemas.get(collection);
-    
+
     if (!schema) {
       errors.push(`Collection '${collection}' not found`);
       return errors;
@@ -396,7 +396,7 @@ class RelationshipFilterParser {
         // Validate relationship filter
         const [relationPath] = key.split('.');
         const relationship = schema.relationships?.[relationPath];
-        
+
         if (!relationship) {
           errors.push(`Unknown relationship: ${relationPath} in collection ${collection}`);
         }
@@ -411,10 +411,10 @@ class RelationshipFilterParser {
       if (typeof value === 'string' && value.includes('.')) {
         const [operator] = value.split('.');
         const validOperators = [
-          'eq', 'neq', 'ne', 'gt', 'gte', 'lt', 'lte', 
+          'eq', 'neq', 'ne', 'gt', 'gte', 'lt', 'lte',
           'in', 'nin', 'like', 'ilike', 'regex', 'exists', 'null', 'empty'
         ];
-        
+
         if (!validOperators.includes(operator)) {
           errors.push(`Invalid operator '${operator}' for field ${key}`);
         }
@@ -466,24 +466,24 @@ class RelationshipFilterParser {
   buildPaginationStages(page, limit, schema) {
     const stages = [];
     const mongorestConfig = schema?.mongorest || {};
-    
+
     // Apply limits
     const maxLimit = mongorestConfig.maxLimit || 1000;
     const defaultLimit = mongorestConfig.defaultLimit || 50;
     const actualLimit = Math.min(limit || defaultLimit, maxLimit);
-    
+
     // Calculate skip
     const actualPage = Math.max(page || 1, 1);
     const skip = (actualPage - 1) * actualLimit;
-    
+
     if (skip > 0) {
       stages.push({ $skip: skip });
     }
-    
+
     stages.push({ $limit: actualLimit });
-    
+
     return stages;
   }
 }
 
-module.exports = RelationshipFilterParser;
+export default RelationshipFilterParser;

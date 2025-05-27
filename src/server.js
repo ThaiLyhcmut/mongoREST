@@ -1,23 +1,33 @@
-const fastify = require('fastify');
-const path = require('path');
-require('dotenv').config();
+import fastify from 'fastify';
+import path from 'path';
+import 'dotenv/config';
+import { fileURLToPath } from 'url';
+import fs from 'fs/promises';
+
+// Get the current directory and filename
+const __filename = fileURLToPath(import.meta.url);
 
 // Import core modules
-const SchemaLoader = require('./core/schema-loader');
-const DatabaseManager = require('./core/database-manager');
-const AuthManager = require('./middleware/auth');
-const ValidationManager = require('./middleware/validation');
-const ScriptParsingMiddleware = require('./middleware/script-parsing');
-const { createRelationshipMiddleware } = require('./middleware/relationships');
-const CRUDGenerator = require('./core/crud-generator');
-const FunctionExecutor = require('./core/function-executor');
-const MongoScriptParser = require('./core/script-parser');
+import SchemaLoader from './core/schema-loader.js';
+import DatabaseManager from './core/database-manager.js';
+import AuthManager from './middleware/auth.js';
+import ValidationManager from './middleware/validation.js';
+import ScriptParsingMiddleware from './middleware/script-parsing.js';
+import { createRelationshipMiddleware } from './middleware/relationships.js';
+import CRUDGenerator from './core/crud-generator.js';
+import FunctionExecutor from './core/function-executor.js';
+import MongoScriptParser from './core/script-parser.js';
 
 // Import routes
-const crudRoutes = require('./routes/crud');
-const functionRoutes = require('./routes/functions');
-const scriptRoutes = require('./routes/scripts');
-const healthRoutes = require('./routes/health');
+import crudRoutes from './routes/crud.js';
+import functionRoutes from './routes/functions.js';
+import scriptRoutes from './routes/scripts.js';
+import healthRoutes from './routes/health.js';
+
+async function readJson(filePath) {
+  const data = await fs.readFile(filePath, 'utf-8');
+  return JSON.parse(data);
+}
 
 class MongoRESTServer {
   constructor() {
@@ -39,16 +49,16 @@ class MongoRESTServer {
       this.fastify = fastify({
         logger: {
           level: process.env.LOG_LEVEL || 'info',
-          prettyPrint: process.env.NODE_ENV === 'development'
+          // prettyPrint: process.env.NODE_ENV === 'development'
         },
         bodyLimit: parseInt(process.env.BODY_LIMIT) || 10 * 1024 * 1024, // 10MB
         keepAliveTimeout: parseInt(process.env.KEEP_ALIVE_TIMEOUT) || 5000
       });
 
-      // Load configurations
-      const serverConfig = require('../config/server.json');
-      const authConfig = require('../config/auth.json');
-      const methodConfig = require('../config/method-operations.json');
+      const __dirname = path.dirname(fileURLToPath(import.meta.url));
+      const serverConfig = await readJson(path.join(__dirname, '../config/server.json'));
+      const authConfig = await readJson(path.join(__dirname, '../config/auth.json'));
+      const methodConfig = await readJson(path.join(__dirname, '../config/method-operations.json'));
 
       // Initialize core components
       this.schemaLoader = new SchemaLoader();
@@ -69,6 +79,18 @@ class MongoRESTServer {
       this.crudGenerator = new CRUDGenerator(this.schemaLoader, this.dbManager);
       this.functionExecutor = new FunctionExecutor(this.schemaLoader, this.dbManager);
 
+      // Decorate Fastify instance with core components so plugins can access them
+      this.fastify.decorate('schemaLoader', this.schemaLoader);
+      this.fastify.decorate('dbManager', this.dbManager);
+      this.fastify.decorate('authManager', this.authManager);
+      this.fastify.decorate('validationManager', this.validationManager);
+      this.fastify.decorate('crudGenerator', this.crudGenerator);
+      // this.fastify.decorate('functionExecutor', this.functionExecutor); // Add if functionRoutes needs it
+      // this.fastify.decorate('scriptParser', this.scriptParser); // Add if needed
+      // this.fastify.decorate('scriptParsingMiddleware', this.scriptParsingMiddleware); // Add if needed
+      // this.fastify.decorate('relationshipMiddleware', this.relationshipMiddleware); // Add if needed
+
+
       // Register plugins
       await this.registerPlugins(serverConfig);
 
@@ -80,23 +102,31 @@ class MongoRESTServer {
 
       this.fastify.log.info('MongoREST server initialized successfully');
     } catch (error) {
-      this.fastify.log.error('Failed to initialize server:', error);
+      if (this.fastify && this.fastify.log) {
+        this.fastify.log.error('Failed to initialize server:', error);
+      } else {
+        console.error('Failed to initialize server:', error);
+      }
       throw error;
     }
   }
 
   async registerPlugins(config) {
     // CORS plugin
-    await this.fastify.register(require('@fastify/cors'), config.cors);
+    const fastifyCors = (await import('@fastify/cors')).default;
+    await this.fastify.register(fastifyCors, config.cors);
 
     // Helmet for security
-    await this.fastify.register(require('@fastify/helmet'));
+    const fastifyHelmet = (await import('@fastify/helmet')).default;
+    await this.fastify.register(fastifyHelmet);
 
     // Rate limiting
-    await this.fastify.register(require('@fastify/rate-limit'), config.rateLimit);
+    const fastifyRateLimit = (await import('@fastify/rate-limit')).default;
+    await this.fastify.register(fastifyRateLimit, config.rateLimit);
 
     // JWT plugin
-    await this.fastify.register(require('@fastify/jwt'), {
+    const fastifyJwt = (await import('@fastify/jwt')).default;
+    await this.fastify.register(fastifyJwt, {
       secret: process.env.JWT_SECRET,
       sign: {
         algorithm: 'HS256',
@@ -113,8 +143,10 @@ class MongoRESTServer {
 
     // Swagger documentation
     if (config.swagger && config.swagger.enabled) {
-      await this.fastify.register(require('@fastify/swagger'), config.swagger);
-      await this.fastify.register(require('@fastify/swagger-ui'), {
+      const fastifySwagger = (await import('@fastify/swagger')).default;
+      await this.fastify.register(fastifySwagger, config.swagger);
+      const fastifySwaggerUi = (await import('@fastify/swagger-ui')).default;
+      await this.fastify.register(fastifySwaggerUi, {
         routePrefix: config.swagger.routePrefix || '/docs'
       });
     }
@@ -137,19 +169,24 @@ class MongoRESTServer {
       };
     });
 
-    // Register script parsing middleware decorators
-    this.fastify.decorate('parseMongoScript', this.scriptParsingMiddleware.parseMongoScript());
-    this.fastify.decorate('validateScript', this.scriptParsingMiddleware.validateScript());
-    this.fastify.decorate('scriptRateLimit', this.scriptParsingMiddleware.scriptRateLimit());
-    this.fastify.decorate('logScriptExecution', this.scriptParsingMiddleware.logScriptExecution());
-    this.fastify.decorate('analyzeScript', this.scriptParsingMiddleware.analyzeScript());
-    this.fastify.decorate('enhanceScriptResponse', this.scriptParsingMiddleware.enhanceScriptResponse());
+    // Decorate core middleware functions
+    this.fastify.decorate('authenticate', this.authManager.authenticate.bind(this.authManager));
+    this.fastify.decorate('authorize', this.authManager.authorize.bind(this.authManager));
+    this.fastify.decorate('authorizeCollection', this.authManager.authorizeCollection.bind(this.authManager));
+    this.fastify.decorate('authorizeFunction', this.authManager.authorizeFunction.bind(this.authManager));
+
+    this.fastify.decorate('parseMongoScript', this.scriptParsingMiddleware.parseMongoScript.bind(this.scriptParsingMiddleware));
+    this.fastify.decorate('validateScript', this.scriptParsingMiddleware.validateScript.bind(this.scriptParsingMiddleware));
+    this.fastify.decorate('scriptRateLimit', this.scriptParsingMiddleware.scriptRateLimit.bind(this.scriptParsingMiddleware));
+    this.fastify.decorate('logScriptExecution', this.scriptParsingMiddleware.logScriptExecution.bind(this.scriptParsingMiddleware));
+    this.fastify.decorate('analyzeScript', this.scriptParsingMiddleware.analyzeScript.bind(this.scriptParsingMiddleware));
+    this.fastify.decorate('enhanceScriptResponse', this.scriptParsingMiddleware.enhanceScriptResponse.bind(this.scriptParsingMiddleware));
 
     // Register relationship middleware decorators
-    this.fastify.decorate('parseRelationships', this.relationshipMiddleware.parseRelationships);
-    this.fastify.decorate('validateRelationshipPermissions', this.relationshipMiddleware.validateRelationshipPermissions);
-    this.fastify.decorate('logRelationshipQueries', this.relationshipMiddleware.logRelationshipQueries);
-    this.fastify.decorate('authorizeRelationships', this.authManager.authorizeRelationships());
+    this.fastify.decorate('parseRelationships', this.relationshipMiddleware.parseRelationships.bind(this.relationshipMiddleware));
+    this.fastify.decorate('validateRelationshipPermissions', this.relationshipMiddleware.validateRelationshipPermissions.bind(this.relationshipMiddleware));
+    this.fastify.decorate('logRelationshipQueries', this.relationshipMiddleware.logRelationshipQueries.bind(this.relationshipMiddleware));
+    this.fastify.decorate('authorizeRelationships', this.authManager.authorizeRelationships.bind(this.authManager));
 
     // Error handler
     this.fastify.setErrorHandler(async (error, request, reply) => {
@@ -216,19 +253,13 @@ class MongoRESTServer {
     await this.fastify.register(healthRoutes, { prefix: '/health' });
 
     // CRUD routes - these are auto-generated based on schemas
-    await this.fastify.register(async (fastify) => {
-      await fastify.register(crudRoutes, { prefix: '/crud' });
-    });
+    await this.fastify.register(crudRoutes, { prefix: '/crud' });
 
     // Function routes
-    await this.fastify.register(async (fastify) => {
-      await fastify.register(functionRoutes, { prefix: '/functions' });
-    });
+    await this.fastify.register(functionRoutes, { prefix: '/functions' });
 
     // Script execution routes
-    await this.fastify.register(async (fastify) => {
-      await fastify.register(scriptRoutes, { prefix: '/scripts' });
-    });
+    await this.fastify.register(scriptRoutes, { prefix: '/scripts' });
 
     // Root route
     this.fastify.get('/', async (request, reply) => {
@@ -265,18 +296,17 @@ class MongoRESTServer {
       const port = parseInt(process.env.PORT) || 3000;
 
       await this.fastify.listen({ host, port });
-      
+
       this.fastify.log.info(`MongoREST server started at http://${host}:${port}`);
       this.fastify.log.info(`API Documentation: http://${host}:${port}/docs`);
       this.fastify.log.info(`Health Check: http://${host}:${port}/health`);
-      
+
       // Log available collections and functions
       const collections = Array.from(this.schemaLoader.schemas.keys());
       const functions = Array.from(this.schemaLoader.functions.keys());
-      
+
       this.fastify.log.info(`Available collections: ${collections.join(', ')}`);
       this.fastify.log.info(`Available functions: ${functions.join(', ')}`);
-
     } catch (error) {
       this.fastify.log.error('Failed to start server:', error);
       process.exit(1);
@@ -294,6 +324,8 @@ class MongoRESTServer {
     }
   }
 }
+
+let server = null;
 
 // Handle graceful shutdown
 process.on('SIGINT', async () => {
@@ -313,9 +345,9 @@ process.on('SIGTERM', async () => {
 });
 
 // Start server if this file is run directly
-if (require.main === module) {
-  const server = new MongoRESTServer();
-  
+if (__filename === process.argv[1]) {
+  server = new MongoRESTServer();
+
   server.initialize()
     .then(() => server.start())
     .catch(error => {
@@ -324,4 +356,4 @@ if (require.main === module) {
     });
 }
 
-module.exports = MongoRESTServer;
+export default MongoRESTServer;

@@ -12,13 +12,12 @@ class AuthManager {
       try {
         // Verify JWT token
         await request.jwtVerify();
-        
+
         // Validate user payload
         this.validateUserPayload(request.user);
-        
+
         // Add user context
         request.user.permissions = this.getUserPermissions(request.user);
-        
       } catch (error) {
         reply.code(401).send({
           error: 'Authentication failed',
@@ -32,7 +31,7 @@ class AuthManager {
   authorize(requiredPermission) {
     return async (request, reply) => {
       const user = request.user;
-      
+
       if (!user) {
         return reply.code(401).send({
           error: 'Authentication required',
@@ -101,7 +100,7 @@ class AuthManager {
   validateUserPayload(user) {
     const requiredFields = ['sub', 'role'];
     const missingFields = requiredFields.filter(field => !user[field]);
-    
+
     if (missingFields.length > 0) {
       throw new Error(`Invalid JWT payload. Missing fields: ${missingFields.join(', ')}`);
     }
@@ -128,7 +127,7 @@ class AuthManager {
   // Check if user has specific permission
   hasPermission(user, requiredPermission) {
     const userPermissions = user.permissions || this.getUserPermissions(user);
-    
+
     // Admin role has all permissions
     if (user.role === 'admin' || userPermissions.includes('*')) {
       return true;
@@ -211,7 +210,7 @@ class AuthManager {
     // Must have read access to both source and target collections
     const canReadSource = this.canAccessCollection(user, sourceCollection, 'read');
     const canReadTarget = this.canAccessCollection(user, targetCollection, 'read');
-    
+
     if (!canReadSource || !canReadTarget) {
       return false;
     }
@@ -225,7 +224,7 @@ class AuthManager {
   authorizeRelationships() {
     return async (request, reply) => {
       const user = request.user;
-      
+
       if (!user) {
         return reply.code(401).send({
           error: 'Authentication required'
@@ -237,27 +236,27 @@ class AuthManager {
         return; // No relationships to authorize
       }
 
-      const sourceCollection = request.params.collection || 
-                              request.routerPath.split('/').pop();
-      
+      const sourceCollection = request.params.collection
+                              || request.routerPath.split('/').pop();
+
       // Check each relationship in the query
       for (const field of request.relationshipQuery.fields) {
         if (field.type === 'relationship' || field.type === 'aggregate') {
           const relationName = field.relationName || field.alias;
-          
+
           // Get relationship definition from schema
           const schemaLoader = request.context.schemaLoader;
           const schema = schemaLoader.getSchema(sourceCollection);
           const relationship = schema?.relationships?.[relationName];
-          
+
           if (relationship) {
             const canAccess = this.canAccessRelationship(
-              user, 
-              sourceCollection, 
-              relationName, 
+              user,
+              sourceCollection,
+              relationName,
               relationship.collection
             );
-            
+
             if (!canAccess) {
               return reply.code(403).send({
                 error: 'Relationship access denied',
@@ -290,7 +289,7 @@ class AuthManager {
   // Create rate limiting middleware for specific user
   createRateLimiter(user) {
     const limits = this.getRateLimit(user);
-    
+
     return {
       max: limits.requests,
       timeWindow: this.parseTimeWindow(limits.window),
@@ -346,7 +345,7 @@ class AuthManager {
 
       const limits = this.getRateLimit(request.user);
       const key = `ratelimit:${request.user.sub}:${request.user.role}`;
-      
+
       // This would integrate with Redis or memory cache for production
       // For now, we rely on Fastify's built-in rate limiting
       request.rateLimit = {
@@ -359,7 +358,7 @@ class AuthManager {
   // Get user context information
   getUserContext(user) {
     const roleConfig = this.roles[user.role];
-    
+
     return {
       userId: user.sub,
       role: user.role,
@@ -401,18 +400,18 @@ class AuthManager {
     };
 
     console.log('🔒 Security Event:', JSON.stringify(logEntry));
-    
+
     // In production, send to security monitoring system
     // this.sendToSecurityMonitoring(logEntry);
   }
 
   getEventSeverity(event) {
     const severityMap = {
-      'auth_failed': 'medium',
-      'permission_denied': 'medium',
-      'invalid_token': 'high',
-      'rate_limit_exceeded': 'low',
-      'admin_action': 'high'
+      auth_failed: 'medium',
+      permission_denied: 'medium',
+      invalid_token: 'high',
+      rate_limit_exceeded: 'low',
+      admin_action: 'high'
     };
 
     return severityMap[event] || 'low';
@@ -425,7 +424,7 @@ class AuthManager {
     }
 
     const tokens = {};
-    
+
     for (const [roleName, roleConfig] of Object.entries(this.roles)) {
       tokens[roleName] = this.generateToken({
         userId: `test_${roleName}_user`,
@@ -437,4 +436,4 @@ class AuthManager {
   }
 }
 
-module.exports = AuthManager;
+export default AuthManager;

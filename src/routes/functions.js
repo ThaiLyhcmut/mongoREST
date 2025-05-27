@@ -1,6 +1,6 @@
 // Function Routes - Execute custom functions defined in JSON schemas
 async function functionRoutes(fastify, options) {
-  const { schemaLoader, dbManager, authManager, functionExecutor } = fastify;
+  const { authManager, functionExecutor } = fastify;
 
   // Register authentication and authorization decorators
   fastify.decorate('authenticate', authManager.authenticate());
@@ -50,9 +50,9 @@ async function functionRoutes(fastify, options) {
       const functions = [];
       const categories = new Set();
 
-      for (const [name, func] of schemaLoader.functions) {
+      for (const [name, func] of fastify.schemaLoader.functions) {
         categories.add(func.category || 'general');
-        
+
         functions.push({
           name,
           description: func.description,
@@ -102,7 +102,7 @@ async function functionRoutes(fastify, options) {
   }, async (request, reply) => {
     try {
       const { functionName } = request.params;
-      const functionDef = schemaLoader.getFunction(functionName);
+      const functionDef = fastify.schemaLoader.getFunction(functionName);
 
       if (!functionDef) {
         return reply.code(404).send({
@@ -120,7 +120,7 @@ async function functionRoutes(fastify, options) {
           collections: [...new Set(functionDef.steps
             .filter(step => step.collection)
             .map(step => step.collection))],
-          estimatedExecutionTime: this.estimateExecutionTime(functionDef)
+          estimatedExecutionTime: estimateExecutionTime(functionDef)
         },
         meta: {
           lastModified: new Date().toISOString()
@@ -152,10 +152,10 @@ async function functionRoutes(fastify, options) {
     preHandler: async (request, reply) => {
       // Authenticate first
       await fastify.authenticate(request, reply);
-      
+
       // Then authorize function access
       await fastify.authorizeFunction(request.params.functionName)(request, reply);
-      
+
       // Apply function-specific rate limiting
       await applyFunctionRateLimit(request, reply);
     }
@@ -164,7 +164,7 @@ async function functionRoutes(fastify, options) {
       const { functionName } = request.params;
       const params = request.body || {};
 
-      const functionDef = schemaLoader.getFunction(functionName);
+      const functionDef = fastify.schemaLoader.getFunction(functionName);
       if (!functionDef) {
         return reply.code(404).send({
           error: 'Function not found',
@@ -203,7 +203,6 @@ async function functionRoutes(fastify, options) {
       });
 
       return result;
-
     } catch (error) {
       fastify.log.error(`Function execution failed: ${request.params.functionName}`, error);
       throw error;
@@ -211,20 +210,20 @@ async function functionRoutes(fastify, options) {
   });
 
   // Category-based function routes
-  fastify.register(async function(fastify) {
+  fastify.register(async (fastify) => {
     // Analytics functions
-    fastify.register(async function(fastify) {
+    fastify.register(async (fastify) => {
       // Auto-register analytics functions
       await registerCategoryFunctions(fastify, 'analytics');
     }, { prefix: '/analytics' });
 
-    // Integration functions  
-    fastify.register(async function(fastify) {
+    // Integration functions
+    fastify.register(async (fastify) => {
       await registerCategoryFunctions(fastify, 'integrations');
     }, { prefix: '/integrations' });
 
     // Report functions
-    fastify.register(async function(fastify) {
+    fastify.register(async (fastify) => {
       await registerCategoryFunctions(fastify, 'reports');
     }, { prefix: '/reports' });
   });
@@ -303,8 +302,8 @@ async function functionRoutes(fastify, options) {
   }, async (request, reply) => {
     try {
       const { functionName } = request.params;
-      
-      const functionDef = schemaLoader.getFunction(functionName);
+
+      const functionDef = fastify.schemaLoader.getFunction(functionName);
       if (!functionDef) {
         return reply.code(404).send({
           error: 'Function not found',
@@ -349,10 +348,10 @@ async function functionRoutes(fastify, options) {
 
   // Helper functions
   async function registerCategoryFunctions(fastify, category) {
-    for (const [name, func] of schemaLoader.functions) {
+    for (const [name, func] of fastify.schemaLoader.functions) {
       if (func.category === category) {
         const routePath = `/${func.name.replace(/([A-Z])/g, '-$1').toLowerCase()}`;
-        
+
         fastify.route({
           method: func.method || 'POST',
           url: routePath,
@@ -394,12 +393,12 @@ async function functionRoutes(fastify, options) {
   }
 
   async function applyFunctionRateLimit(request, reply) {
-    const functionName = request.params.functionName || 
-                        extractFunctionNameFromRoute(request.routerPath);
-    
+    const functionName = request.params.functionName
+                        || extractFunctionNameFromRoute(request.routerPath);
+
     if (!functionName) return;
 
-    const functionDef = schemaLoader.getFunction(functionName);
+    const functionDef = fastify.schemaLoader.getFunction(functionName);
     if (!functionDef?.rateLimits) return;
 
     const userRateLimit = authManager.getRateLimit(request.user);
@@ -415,7 +414,7 @@ async function functionRoutes(fastify, options) {
     // In production, use Redis or similar for distributed rate limiting
     const key = `ratelimit:function:${functionName}:${request.user.sub}`;
     const window = parseTimeWindow(functionRateLimit.window || '1h');
-    
+
     // This is a simplified implementation
     // Real implementation would use proper rate limiting with Redis
     request.rateLimit = {
@@ -444,7 +443,7 @@ async function functionRoutes(fastify, options) {
     return parseInt(value) * multipliers[unit];
   }
 
-  this.estimateExecutionTime = (functionDef) => {
+  const estimateExecutionTime = (functionDef) => {
     // Simple estimation based on step types and count
     const stepTypeWeights = {
       find: 100,
@@ -470,4 +469,4 @@ async function functionRoutes(fastify, options) {
   };
 }
 
-module.exports = functionRoutes;
+export default functionRoutes;

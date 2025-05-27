@@ -8,10 +8,10 @@ const addFormats = require('ajv-formats');
 async function validateSchemas() {
   console.log('🔍 Validating MongoREST schemas...\n');
 
-  const validator = new Ajv({ 
+  const validator = new Ajv({
     allErrors: true,
     verbose: true,
-    strict: false 
+    strict: false
   });
   addFormats(validator);
 
@@ -24,26 +24,26 @@ async function validateSchemas() {
   // Validate collection schemas
   console.log('📄 Validating Collection Schemas:');
   const collectionsPath = path.join(process.cwd(), 'schemas', 'collections');
-  
+
   try {
     const collectionFiles = await fs.readdir(collectionsPath);
-    
+
     for (const file of collectionFiles) {
       if (!file.endsWith('.json')) continue;
-      
+
       totalSchemas++;
       const filePath = path.join(collectionsPath, file);
-      
+
       try {
         const content = await fs.readFile(filePath, 'utf8');
         const schema = JSON.parse(content);
-        
+
         // Validate JSON Schema structure
         validator.compile(schema);
-        
+
         // Validate MongoREST specific requirements
         validateCollectionSchema(schema, file);
-        
+
         validSchemas++;
         console.log(`  ✅ ${file} - Valid`);
       } catch (error) {
@@ -58,7 +58,7 @@ async function validateSchemas() {
   // Validate function schemas
   console.log('\n🔧 Validating Function Schemas:');
   const functionsPath = path.join(process.cwd(), 'schemas', 'functions');
-  
+
   try {
     await validateFunctionSchemasRecursively(functionsPath, validator, (file, valid, error) => {
       totalFunctions++;
@@ -78,7 +78,7 @@ async function validateSchemas() {
   console.log('\n📊 Validation Summary:');
   console.log(`  Collections: ${validSchemas}/${totalSchemas} valid`);
   console.log(`  Functions: ${validFunctions}/${totalFunctions} valid`);
-  
+
   if (errors.length > 0) {
     console.log('\n❌ Errors found:');
     errors.forEach(error => console.log(`  - ${error}`));
@@ -92,17 +92,17 @@ async function validateSchemas() {
 async function validateFunctionSchemasRecursively(dir, validator, callback) {
   try {
     const entries = await fs.readdir(dir, { withFileTypes: true });
-    
+
     for (const entry of entries) {
       const fullPath = path.join(dir, entry.name);
-      
+
       if (entry.isDirectory()) {
         await validateFunctionSchemasRecursively(fullPath, validator, callback);
       } else if (entry.isFile() && entry.name.endsWith('.json')) {
         try {
           const content = await fs.readFile(fullPath, 'utf8');
           const functionDef = JSON.parse(content);
-          
+
           validateFunctionSchema(functionDef, entry.name, validator);
           callback(entry.name, true, null);
         } catch (error) {
@@ -121,7 +121,7 @@ function validateCollectionSchema(schema, filename) {
   // Required fields
   const requiredFields = ['title', 'type', 'properties'];
   const missingFields = requiredFields.filter(field => !schema[field]);
-  
+
   if (missingFields.length > 0) {
     throw new Error(`Missing required fields: ${missingFields.join(', ')}`);
   }
@@ -150,7 +150,7 @@ function validateFunctionSchema(functionDef, filename, validator) {
   // Required fields
   const requiredFields = ['name', 'description', 'steps'];
   const missingFields = requiredFields.filter(field => !functionDef[field]);
-  
+
   if (missingFields.length > 0) {
     throw new Error(`Missing required fields: ${missingFields.join(', ')}`);
   }
@@ -177,7 +177,7 @@ function validateFunctionSchema(functionDef, filename, validator) {
   if (functionDef.input) {
     validator.compile(functionDef.input);
   }
-  
+
   if (functionDef.output) {
     validator.compile(functionDef.output);
   }

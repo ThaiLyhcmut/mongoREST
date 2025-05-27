@@ -12,7 +12,7 @@ async function scriptRoutes(fastify, options) {
           {
             type: 'object',
             properties: {
-              script: { 
+              script: {
                 type: 'string',
                 description: 'MongoDB shell script (e.g., "db.users.find({age: {$gte: 18}})")'
               },
@@ -30,7 +30,7 @@ async function scriptRoutes(fastify, options) {
           {
             type: 'object',
             properties: {
-              mongoScript: { 
+              mongoScript: {
                 type: 'string',
                 description: 'Alternative field name for MongoDB script'
               },
@@ -70,18 +70,18 @@ async function scriptRoutes(fastify, options) {
     },
     preHandler: [
       fastify.authenticate,
-      fastify.parseMongoScript(),
-      fastify.validateScript(),
-      fastify.scriptRateLimit(),
-      fastify.logScriptExecution(),
-      fastify.analyzeScript()
+      fastify.parseMongoScript,
+      fastify.validateScript,
+      fastify.scriptRateLimit,
+      fastify.logScriptExecution,
+      fastify.analyzeScript
     ]
   }, async (request, reply) => {
     try {
       const startTime = Date.now();
       const { options = {} } = request.body;
       const parsed = request.parsedScript;
-      
+
       // Handle dry run
       if (options.dryRun) {
         return {
@@ -110,9 +110,9 @@ async function scriptRoutes(fastify, options) {
 
       // Execute the parsed script
       const result = await this.executeMongoOperation(parsed, options);
-      
+
       const executionTime = Date.now() - startTime;
-      
+
       return {
         success: true,
         data: result,
@@ -130,10 +130,9 @@ async function scriptRoutes(fastify, options) {
           recordsAffected: this.getRecordsAffected(result, parsed.operation)
         }
       };
-
     } catch (error) {
       fastify.log.error('Script execution failed:', error);
-      
+
       return reply.code(500).send({
         success: false,
         error: error.message,
@@ -184,11 +183,11 @@ async function scriptRoutes(fastify, options) {
         // Parse and validate all scripts first
         const scripts = request.body.scripts || [];
         const parsedScripts = [];
-        
+
         for (const [index, scriptData] of scripts.entries()) {
           try {
             const parsed = scriptParser.parseAndPrepare(scriptData.script);
-            
+
             // Check permissions for each script
             for (const collection of parsed.meta.collections) {
               const operation = this.getOperationType(parsed.operation);
@@ -200,13 +199,12 @@ async function scriptRoutes(fastify, options) {
                 });
               }
             }
-            
+
             parsedScripts.push({
               ...scriptData,
               parsed,
               index
             });
-            
           } catch (error) {
             return reply.code(400).send({
               error: 'Batch script parsing failed',
@@ -215,7 +213,7 @@ async function scriptRoutes(fastify, options) {
             });
           }
         }
-        
+
         request.parsedScripts = parsedScripts;
       }
     ]
@@ -225,7 +223,7 @@ async function scriptRoutes(fastify, options) {
       const { options = {} } = request.body;
       const parsedScripts = request.parsedScripts;
       const results = [];
-      
+
       if (options.atomic) {
         // Execute all scripts in a transaction
         await dbManager.withTransaction(async (session) => {
@@ -245,7 +243,7 @@ async function scriptRoutes(fastify, options) {
                 error: error.message,
                 script: scriptData.script
               });
-              
+
               if (options.stopOnError) {
                 throw error; // This will rollback the transaction
               }
@@ -271,17 +269,17 @@ async function scriptRoutes(fastify, options) {
               error: error.message,
               script: scriptData.script
             });
-            
+
             if (options.stopOnError) {
               break;
             }
           }
         }
       }
-      
+
       const executionTime = Date.now() - startTime;
       const successCount = results.filter(r => r.success).length;
-      
+
       return {
         success: successCount === results.length,
         results,
@@ -293,7 +291,6 @@ async function scriptRoutes(fastify, options) {
           atomic: options.atomic
         }
       };
-
     } catch (error) {
       fastify.log.error('Batch script execution failed:', error);
       throw error;
@@ -317,16 +314,16 @@ async function scriptRoutes(fastify, options) {
   }, async (request, reply) => {
     try {
       const { script } = request.body;
-      
+
       // Parse and validate script
       const parsed = scriptParser.parseAndPrepare(script);
-      
+
       // Check permissions
       const permissionChecks = [];
       for (const collection of parsed.meta.collections) {
         const operation = this.getOperationType(parsed.operation);
         const hasAccess = authManager.canAccessCollection(request.user, collection, operation);
-        
+
         permissionChecks.push({
           collection,
           operation,
@@ -334,9 +331,9 @@ async function scriptRoutes(fastify, options) {
           reason: hasAccess ? null : `Insufficient permissions for ${operation} on ${collection}`
         });
       }
-      
+
       const allPermissionsValid = permissionChecks.every(check => check.hasAccess);
-      
+
       return {
         valid: allPermissionsValid,
         parsed: {
@@ -349,7 +346,6 @@ async function scriptRoutes(fastify, options) {
         suggestions: this.generateScriptSuggestions(parsed),
         warnings: this.generateScriptWarnings(parsed)
       };
-
     } catch (error) {
       return {
         valid: false,
@@ -379,7 +375,7 @@ async function scriptRoutes(fastify, options) {
   }, async (request, reply) => {
     try {
       const { limit = 20, page = 1, operation, collection, success } = request.query;
-      
+
       // In production, this would query a script execution log collection
       // For now, return mock data
       const mockHistory = Array.from({ length: limit }, (_, i) => ({
@@ -394,7 +390,7 @@ async function scriptRoutes(fastify, options) {
         complexity: Math.floor(Math.random() * 5) + 1,
         recordsAffected: Math.floor(Math.random() * 100)
       }));
-      
+
       return {
         success: true,
         history: mockHistory,
@@ -407,7 +403,6 @@ async function scriptRoutes(fastify, options) {
           filters: { operation, collection, success }
         }
       };
-
     } catch (error) {
       fastify.log.error('Failed to get script history:', error);
       throw error;
@@ -415,7 +410,7 @@ async function scriptRoutes(fastify, options) {
   });
 
   // Helper methods
-  this.executeMongoOperation = async (parsed, options = {}) => {
+  const executeMongoOperation = async (parsed, options = {}) => {
     const collection = dbManager.collection(parsed.collection);
     const { session, timeout = 30000 } = options;
     const execOptions = session ? { session } : {};
@@ -486,7 +481,7 @@ async function scriptRoutes(fastify, options) {
     }
   };
 
-  this.executeExplain = async (parsed, startTime) => {
+  const executeExplain = async (parsed, startTime) => {
     const collection = dbManager.collection(parsed.collection);
     let explainResult;
 
@@ -522,13 +517,12 @@ async function scriptRoutes(fastify, options) {
           explained: true
         }
       };
-
     } catch (error) {
       throw new Error(`Explain failed: ${error.message}`);
     }
   };
 
-  this.getOperationType = (operation) => {
+  const getOperationType = (operation) => {
     const operationMap = {
       find: 'read',
       findOne: 'read',
@@ -543,11 +537,11 @@ async function scriptRoutes(fastify, options) {
       deleteMany: 'delete',
       aggregate: 'read'
     };
-    
+
     return operationMap[operation] || 'read';
   };
 
-  this.getRecordsAffected = (result, operation) => {
+  const getRecordsAffected = (result, operation) => {
     switch (operation) {
       case 'find':
       case 'aggregate':
@@ -571,43 +565,43 @@ async function scriptRoutes(fastify, options) {
     }
   };
 
-  this.generateScriptSuggestions = (parsed) => {
+  const generateScriptSuggestions = (parsed) => {
     const suggestions = [];
-    
+
     // Suggest indexes for complex queries
     if (parsed.meta.complexity > 5) {
       suggestions.push('Consider adding indexes for better performance');
     }
-    
+
     // Suggest pagination for large result sets
     if (parsed.operation === 'find' && !parsed.params.limit) {
       suggestions.push('Consider adding limit() for large result sets');
     }
-    
+
     // Suggest using aggregation for complex operations
     if (parsed.operation === 'find' && parsed.params.query && Object.keys(parsed.params.query).length > 3) {
       suggestions.push('Consider using aggregation pipeline for complex queries');
     }
-    
+
     return suggestions;
   };
 
-  this.generateScriptWarnings = (parsed) => {
+  const generateScriptWarnings = (parsed) => {
     const warnings = [];
-    
+
     // Warning for operations without filters
-    if (['updateMany', 'deleteMany'].includes(parsed.operation) && 
-        (!parsed.params.filter || Object.keys(parsed.params.filter).length === 0)) {
+    if (['updateMany', 'deleteMany'].includes(parsed.operation)
+        && (!parsed.params.filter || Object.keys(parsed.params.filter).length === 0)) {
       warnings.push('Operation affects all documents - consider adding filters');
     }
-    
+
     // Warning for high complexity
     if (parsed.meta.complexity > 7) {
       warnings.push('High complexity script may impact performance');
     }
-    
+
     return warnings;
   };
 }
 
-module.exports = scriptRoutes;
+export default scriptRoutes;

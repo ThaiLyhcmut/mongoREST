@@ -1,4 +1,4 @@
-const { MongoClient, ObjectId } = require('mongodb');
+import { MongoClient, ObjectId } from 'mongodb';
 
 class DatabaseManager {
   constructor() {
@@ -7,7 +7,7 @@ class DatabaseManager {
     this.isConnected = false;
     this.connectionString = process.env.MONGODB_URI || 'mongodb://localhost:27017/mongorest';
     this.dbName = process.env.MONGODB_DB_NAME || 'mongorest';
-    
+
     // Connection options
     this.options = {
       maxPoolSize: parseInt(process.env.MONGODB_MAX_POOL_SIZE) || 10,
@@ -25,22 +25,22 @@ class DatabaseManager {
     try {
       console.log('Connecting to MongoDB...');
       console.log(`Connection string: ${this.connectionString.replace(/\/\/.*:.*@/, '//***:***@')}`);
-      
+
       this.client = new MongoClient(this.connectionString, this.options);
       await this.client.connect();
-      
+
       // Test the connection
       await this.client.db('admin').command({ ping: 1 });
-      
+
       this.db = this.client.db(this.dbName);
       this.isConnected = true;
-      
+
       console.log('✅ Connected to MongoDB successfully');
       console.log(`📊 Database: ${this.dbName}`);
-      
+
       // Setup connection event listeners
       this.setupEventListeners();
-      
+
       return this.db;
     } catch (error) {
       console.error('❌ Failed to connect to MongoDB:', error.message);
@@ -103,7 +103,7 @@ class DatabaseManager {
 
       const result = await this.db.admin().ping();
       const stats = await this.db.stats();
-      
+
       return {
         status: 'connected',
         database: this.dbName,
@@ -147,7 +147,7 @@ class DatabaseManager {
     const k = 1024;
     const sizes = ['Bytes', 'KB', 'MB', 'GB'];
     const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+    return `${parseFloat((bytes / Math.pow(k, i)).toFixed(2))} ${sizes[i]}`;
   }
 
   // Create indexes based on schema definitions
@@ -157,13 +157,13 @@ class DatabaseManager {
     }
 
     const collection = this.collection(collectionName);
-    
+
     try {
       for (const indexDef of indexes) {
         const indexSpec = indexDef.fields;
-        const options = { 
+        const options = {
           background: true,
-          ...indexDef.options 
+          ...indexDef.options
         };
 
         // Handle unique constraint
@@ -194,7 +194,7 @@ class DatabaseManager {
   // Initialize collections with indexes
   async initializeCollections(schemas) {
     console.log('Initializing collections and indexes...');
-    
+
     for (const [collectionName, schema] of schemas) {
       try {
         // Create collection if it doesn't exist
@@ -212,19 +212,19 @@ class DatabaseManager {
         console.error(`❌ Failed to initialize collection ${collectionName}:`, error.message);
       }
     }
-    
+
     console.log('✅ Collections and indexes initialized');
   }
 
   // Transaction support
   async withTransaction(callback) {
     const session = this.client.startSession();
-    
+
     try {
       const result = await session.withTransaction(async () => {
         return await callback(session);
       });
-      
+
       return result;
     } catch (error) {
       throw error;
@@ -236,7 +236,7 @@ class DatabaseManager {
   // Aggregation pipeline helper
   async aggregate(collectionName, pipeline, options = {}) {
     const collection = this.collection(collectionName);
-    
+
     // Add execution timeout
     const aggregateOptions = {
       maxTimeMS: parseInt(process.env.FUNCTION_TIMEOUT) || 30000,
@@ -249,7 +249,7 @@ class DatabaseManager {
   // Find with pagination helper
   async findWithPagination(collectionName, query = {}, options = {}) {
     const collection = this.collection(collectionName);
-    
+
     const {
       page = 1,
       limit = 50,
@@ -259,7 +259,7 @@ class DatabaseManager {
     } = options;
 
     const skip = (page - 1) * limit;
-    
+
     // Get total count and documents in parallel
     const [documents, totalCount] = await Promise.all([
       collection
@@ -272,7 +272,7 @@ class DatabaseManager {
     ]);
 
     const totalPages = Math.ceil(totalCount / limit);
-    
+
     return {
       documents,
       pagination: {
@@ -289,7 +289,7 @@ class DatabaseManager {
   // Bulk operations helper
   async bulkWrite(collectionName, operations, options = {}) {
     const collection = this.collection(collectionName);
-    
+
     const bulkOptions = {
       ordered: false, // Allow parallel execution
       ...options
@@ -354,4 +354,4 @@ class DatabaseManager {
   }
 }
 
-module.exports = DatabaseManager;
+export default DatabaseManager;

@@ -1,5 +1,3 @@
-const { ObjectId } = require('mongodb');
-
 class FunctionExecutor {
   constructor(schemaLoader, dbManager) {
     this.schemaLoader = schemaLoader;
@@ -44,7 +42,7 @@ class FunctionExecutor {
   // Main function execution method
   async executeFunction(functionName, params, context) {
     const startTime = Date.now();
-    
+
     try {
       const functionDef = this.functions.get(functionName);
       if (!functionDef) {
@@ -76,11 +74,11 @@ class FunctionExecutor {
         // Execute steps in sequence
         for (const step of functionDef.steps) {
           console.log(`  🔧 Executing step: ${step.id} (${step.type})`);
-          
+
           const stepStartTime = Date.now();
           const result = await this.executeStep(step, executionContext);
           const stepExecutionTime = Date.now() - stepStartTime;
-          
+
           executionContext.steps.set(step.id, {
             output: result,
             executionTime: stepExecutionTime,
@@ -97,7 +95,7 @@ class FunctionExecutor {
         await this.executeHooks(functionDef.hooks?.afterExecution, functionName, executionContext);
 
         const totalExecutionTime = Date.now() - startTime;
-        
+
         console.log(`✅ Function ${functionName} completed in ${totalExecutionTime}ms`);
 
         return {
@@ -110,13 +108,12 @@ class FunctionExecutor {
             timestamp: new Date().toISOString()
           }
         };
-
       } catch (error) {
         // Execute error hooks
         if (functionDef.hooks?.onError) {
-          await this.executeHooks(functionDef.hooks.onError, functionName, { 
-            ...executionContext, 
-            error 
+          await this.executeHooks(functionDef.hooks.onError, functionName, {
+            ...executionContext,
+            error
           });
         }
 
@@ -127,10 +124,9 @@ class FunctionExecutor {
 
         throw error;
       }
-
     } catch (error) {
       const totalExecutionTime = Date.now() - startTime;
-      
+
       console.error(`❌ Function ${functionName} failed after ${totalExecutionTime}ms:`, error);
 
       return {
@@ -154,25 +150,25 @@ class FunctionExecutor {
 
     // Resolve template variables in step configuration
     const resolvedStep = this.resolveTemplates(step, context);
-    
+
     // Add step timeout
     const timeout = parseInt(process.env.FUNCTION_TIMEOUT) || 30000;
-    const timeoutPromise = new Promise((_, reject) => 
+    const timeoutPromise = new Promise((_, reject) =>
       setTimeout(() => reject(new Error(`Step ${step.id} timed out after ${timeout}ms`)), timeout)
     );
 
     // Execute step with timeout
     const stepPromise = executor(resolvedStep, context);
-    
+
     return await Promise.race([stepPromise, timeoutPromise]);
   }
 
   // Resolve template variables in object
   resolveTemplates(obj, context) {
     const resolved = JSON.parse(JSON.stringify(obj));
-    
+
     this.replaceTemplatesRecursive(resolved, context);
-    
+
     return resolved;
   }
 
@@ -181,7 +177,7 @@ class FunctionExecutor {
     if (typeof obj === 'string') {
       return this.replaceTemplateString(obj, context);
     }
-    
+
     if (Array.isArray(obj)) {
       for (let i = 0; i < obj.length; i++) {
         obj[i] = this.replaceTemplatesRecursive(obj[i], context);
@@ -191,14 +187,14 @@ class FunctionExecutor {
         obj[key] = this.replaceTemplatesRecursive(value, context);
       }
     }
-    
+
     return obj;
   }
 
   // Replace template variables in string
   replaceTemplateString(str, context) {
     const templateRegex = /\{\{([^}]+)\}\}/g;
-    
+
     return str.replace(templateRegex, (match, path) => {
       try {
         const value = this.getValueByPath(context, path.trim());
@@ -214,12 +210,12 @@ class FunctionExecutor {
   getValueByPath(obj, path) {
     const keys = path.split('.');
     let current = obj;
-    
+
     for (const key of keys) {
       if (current === null || current === undefined) {
         return undefined;
       }
-      
+
       // Handle array access with brackets
       const arrayMatch = key.match(/^(.+)\[(\d+)\]$/);
       if (arrayMatch) {
@@ -232,7 +228,7 @@ class FunctionExecutor {
         current = current[key];
       }
     }
-    
+
     return current;
   }
 
@@ -241,7 +237,7 @@ class FunctionExecutor {
     const collection = this.dbManager.collection(step.collection);
     const query = step.query || {};
     const options = step.options || {};
-    
+
     const result = await collection.find(query, options).toArray();
     return result;
   }
@@ -250,7 +246,7 @@ class FunctionExecutor {
     const collection = this.dbManager.collection(step.collection);
     const query = step.query || {};
     const options = step.options || {};
-    
+
     const result = await collection.findOne(query, options);
     return result;
   }
@@ -258,12 +254,12 @@ class FunctionExecutor {
   async executeInsertOneStep(step, context) {
     const collection = this.dbManager.collection(step.collection);
     const document = step.document;
-    
+
     // Add timestamps
     const now = new Date().toISOString();
     document.createdAt = document.createdAt || now;
     document.updatedAt = now;
-    
+
     const result = await collection.insertOne(document);
     return {
       insertedId: result.insertedId,
@@ -275,14 +271,14 @@ class FunctionExecutor {
   async executeInsertManyStep(step, context) {
     const collection = this.dbManager.collection(step.collection);
     const documents = step.documents;
-    
+
     // Add timestamps to all documents
     const now = new Date().toISOString();
     documents.forEach(doc => {
       doc.createdAt = doc.createdAt || now;
       doc.updatedAt = now;
     });
-    
+
     const result = await collection.insertMany(documents);
     return {
       insertedIds: result.insertedIds,
@@ -296,14 +292,14 @@ class FunctionExecutor {
     const filter = step.filter || {};
     const update = step.update || {};
     const options = step.options || {};
-    
+
     // Add updated timestamp
     if (update.$set) {
       update.$set.updatedAt = new Date().toISOString();
     } else {
       update.$set = { updatedAt: new Date().toISOString() };
     }
-    
+
     const result = await collection.updateOne(filter, update, options);
     return {
       matchedCount: result.matchedCount,
@@ -317,14 +313,14 @@ class FunctionExecutor {
     const filter = step.filter || {};
     const update = step.update || {};
     const options = step.options || {};
-    
+
     // Add updated timestamp
     if (update.$set) {
       update.$set.updatedAt = new Date().toISOString();
     } else {
       update.$set = { updatedAt: new Date().toISOString() };
     }
-    
+
     const result = await collection.updateMany(filter, update, options);
     return {
       matchedCount: result.matchedCount,
@@ -336,7 +332,7 @@ class FunctionExecutor {
   async executeDeleteOneStep(step, context) {
     const collection = this.dbManager.collection(step.collection);
     const filter = step.filter || {};
-    
+
     const result = await collection.deleteOne(filter);
     return {
       deletedCount: result.deletedCount,
@@ -347,7 +343,7 @@ class FunctionExecutor {
   async executeDeleteManyStep(step, context) {
     const collection = this.dbManager.collection(step.collection);
     const filter = step.filter || {};
-    
+
     const result = await collection.deleteMany(filter);
     return {
       deletedCount: result.deletedCount,
@@ -359,7 +355,7 @@ class FunctionExecutor {
     const collection = this.dbManager.collection(step.collection);
     const pipeline = step.pipeline || [];
     const options = step.options || {};
-    
+
     const result = await collection.aggregate(pipeline, options).toArray();
     return result;
   }
@@ -367,7 +363,7 @@ class FunctionExecutor {
   async executeCountStep(step, context) {
     const collection = this.dbManager.collection(step.collection);
     const query = step.query || {};
-    
+
     const count = await collection.countDocuments(query);
     return count;
   }
@@ -376,7 +372,7 @@ class FunctionExecutor {
     const collection = this.dbManager.collection(step.collection);
     const field = step.field;
     const query = step.query || {};
-    
+
     const result = await collection.distinct(field, query);
     return result;
   }
@@ -385,12 +381,12 @@ class FunctionExecutor {
   async executeTransformStep(step, context) {
     const scriptName = step.script;
     const input = step.input || {};
-    
+
     const script = this.transformScripts.get(scriptName);
     if (!script) {
       throw new Error(`Transform script '${scriptName}' not found`);
     }
-    
+
     return await script(input, context);
   }
 
@@ -398,17 +394,17 @@ class FunctionExecutor {
     const condition = step.condition;
     const thenSteps = step.then || [];
     const elseSteps = step.else || [];
-    
+
     // Evaluate condition (simple implementation)
     const conditionResult = this.evaluateCondition(condition, context);
     const stepsToExecute = conditionResult ? thenSteps : elseSteps;
-    
+
     const results = [];
     for (const subStep of stepsToExecute) {
       const result = await this.executeStep(subStep, context);
       results.push(result);
     }
-    
+
     return {
       condition: conditionResult,
       results
@@ -417,7 +413,7 @@ class FunctionExecutor {
 
   async executeHttpStep(step, context) {
     const { method = 'GET', url, headers = {}, body, timeout = 10000 } = step;
-    
+
     // Simple HTTP request implementation (in production, use a proper HTTP client)
     try {
       const response = await fetch(url, {
@@ -429,9 +425,9 @@ class FunctionExecutor {
         body: body ? JSON.stringify(body) : undefined,
         timeout
       });
-      
+
       const data = await response.json();
-      
+
       return {
         status: response.status,
         success: response.ok,
@@ -445,9 +441,9 @@ class FunctionExecutor {
 
   async executeDelayStep(step, context) {
     const duration = step.duration || 1000;
-    
+
     await new Promise(resolve => setTimeout(resolve, duration));
-    
+
     return {
       delayed: duration,
       timestamp: new Date().toISOString()
@@ -457,7 +453,7 @@ class FunctionExecutor {
   // Transform Scripts
   async processUserReportData(input, context) {
     const { userStats, newUsers, activeUsers, segments } = input;
-    
+
     const processed = {
       summary: {
         totalUsers: userStats[0]?.totalUsers || 0,
@@ -485,7 +481,7 @@ class FunctionExecutor {
 
   async mergeUserOrderData(input, context) {
     const { userStats, orderStats } = input;
-    
+
     // Simple merge implementation
     const merged = userStats.map(user => {
       const userOrders = orderStats.find(order => order._id === user._id) || {};
@@ -516,12 +512,12 @@ class FunctionExecutor {
   // Helper methods
   getCountryCode(country) {
     const countryMap = {
-      'Vietnam': 'VN',
-      'Thailand': 'TH',
-      'Malaysia': 'MY',
-      'Singapore': 'SG',
-      'Indonesia': 'ID',
-      'Philippines': 'PH'
+      Vietnam: 'VN',
+      Thailand: 'TH',
+      Malaysia: 'MY',
+      Singapore: 'SG',
+      Indonesia: 'ID',
+      Philippines: 'PH'
     };
     return countryMap[country] || 'Unknown';
   }
@@ -554,7 +550,7 @@ class FunctionExecutor {
       const lastStep = context.steps.get(functionDef.steps[functionDef.steps.length - 1].id);
       return lastStep?.output;
     }
-    
+
     // Default: return all step outputs
     const outputs = {};
     for (const [stepId, stepResult] of context.steps) {
@@ -579,7 +575,7 @@ class FunctionExecutor {
 
   async executeHook(hookName, functionName, context) {
     console.log(`🪝 Executing function hook: ${hookName}`);
-    
+
     // Example hook implementations
     switch (hookName) {
       case 'validateDateRange':
@@ -590,19 +586,19 @@ class FunctionExecutor {
           }
         }
         break;
-        
+
       case 'checkPermissions':
         // Additional permission checks can be implemented here
         break;
-        
+
       case 'sendNotification':
         console.log(`📬 Notification: Function ${functionName} completed for user ${context.user?.sub}`);
         break;
-        
+
       case 'updateUsageStats':
         console.log(`📊 Usage stats updated for function ${functionName}`);
         break;
-        
+
       case 'logError':
         console.error(`📝 Error logged for function ${functionName}:`, context.error);
         break;
@@ -611,10 +607,10 @@ class FunctionExecutor {
 
   async handleFunctionError(error, functionDef, context) {
     const errorHandling = functionDef.errorHandling;
-    
+
     if (errorHandling.strategy === 'rollback' && errorHandling.rollbackSteps) {
       console.log('🔄 Rolling back function execution...');
-      
+
       for (const stepId of errorHandling.rollbackSteps) {
         try {
           await this.rollbackStep(stepId, context);
@@ -657,4 +653,4 @@ class FunctionExecutor {
   }
 }
 
-module.exports = FunctionExecutor;
+export default FunctionExecutor;

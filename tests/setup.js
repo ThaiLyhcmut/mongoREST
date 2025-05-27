@@ -27,7 +27,7 @@ global.testUtils = {
   cleanDatabase: async (client) => {
     const db = client.db(process.env.MONGODB_DB_NAME);
     const collections = await db.listCollections().toArray();
-    
+
     for (const collection of collections) {
       await db.collection(collection.name).deleteMany({});
     }

@@ -17,7 +17,7 @@ class ValidationManager {
       try {
         const method = request.method;
         const operation = this.inferOperation(request);
-        
+
         if (!this.isOperationAllowed(method, operation)) {
           const error = {
             error: 'Method-Operation Mismatch',
@@ -42,7 +42,6 @@ class ValidationManager {
         // Add operation info to request context
         request.mongoOperation = operation;
         request.isValidOperation = true;
-
       } catch (error) {
         reply.code(400).send({
           error: 'Operation validation failed',
@@ -125,7 +124,7 @@ class ValidationManager {
     }
 
     const allowedOps = this.mappings[method]?.allowedOperations || [];
-    
+
     // Check direct mapping
     if (allowedOps.includes(operation)) {
       return true;
@@ -175,7 +174,7 @@ class ValidationManager {
     }
 
     const writeStages = ['$out', '$merge'];
-    const hasWriteStages = pipeline.some(stage => 
+    const hasWriteStages = pipeline.some(stage =>
       writeStages.some(writeStage => stage[writeStage])
     );
 
@@ -188,7 +187,7 @@ class ValidationManager {
   // Special validation for aggregation operations
   validateAggregationMethod(method, pipeline) {
     const pipelineInfo = this.validateAggregationPipeline(pipeline);
-    
+
     if (method === 'GET' && pipelineInfo.hasWriteStages) {
       throw new Error('GET method cannot be used with aggregation pipelines that contain write stages ($out, $merge)');
     }
@@ -331,11 +330,11 @@ class ValidationManager {
   parseFieldQuery(key, value, mongoQuery) {
     // Handle array notation: field[operator]=value
     const arrayMatch = key.match(/^(.+)\[(.+)\]$/);
-    
+
     if (arrayMatch) {
       const [, field, operator] = arrayMatch;
       const mongoOperator = this.getMongoOperator(operator);
-      
+
       if (mongoOperator) {
         if (!mongoQuery[field]) {
           mongoQuery[field] = {};
@@ -351,15 +350,15 @@ class ValidationManager {
   // Map query operators to MongoDB operators
   getMongoOperator(operator) {
     const operatorMap = {
-      'gte': '$gte',
-      'gt': '$gt',
-      'lte': '$lte',
-      'lt': '$lt',
-      'ne': '$ne',
-      'in': '$in',
-      'nin': '$nin',
-      'exists': '$exists',
-      'regex': '$regex'
+      gte: '$gte',
+      gt: '$gt',
+      lte: '$lte',
+      lt: '$lt',
+      ne: '$ne',
+      in: '$in',
+      nin: '$nin',
+      exists: '$exists',
+      regex: '$regex'
     };
 
     return operatorMap[operator];
@@ -423,7 +422,7 @@ class ValidationManager {
   // Get all allowed operations
   getAllowedOperations() {
     const operations = new Set();
-    
+
     Object.values(this.mappings).forEach(config => {
       config.allowedOperations.forEach(op => operations.add(op));
     });
@@ -450,4 +449,4 @@ class ValidationManager {
   }
 }
 
-module.exports = ValidationManager;
+export default ValidationManager;

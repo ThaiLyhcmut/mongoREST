@@ -1,5 +1,5 @@
-const RelationshipQueryParser = require('../core/relationship-parser');
-const RelationshipFilterParser = require('../core/relationship-filter');
+import RelationshipQueryParser from '../core/relationship-parser.js';
+import RelationshipFilterParser from '../core/relationship-filter.js';
 
 /**
  * Relationship middleware for parsing and validating relationship queries
@@ -18,9 +18,9 @@ class RelationshipMiddleware {
   parseRelationships() {
     return async (request, reply) => {
       try {
-        const collectionName = request.params.collection || 
-                               request.routerPath.split('/').pop();
-        
+        const collectionName = request.params.collection
+                               || request.routerPath.split('/').pop();
+
         if (!collectionName) {
           return reply.code(400).send({
             error: 'Collection not specified',
@@ -31,16 +31,16 @@ class RelationshipMiddleware {
         // Parse relationship query if select parameter exists
         if (request.query.select) {
           const selectQuery = this.relationshipParser.parseSelectQuery(
-            collectionName, 
+            collectionName,
             request.query.select
           );
-          
+
           // Validate relationship query
           const errors = this.relationshipParser.validateRelationshipQuery(
-            collectionName, 
+            collectionName,
             selectQuery.fields
           );
-          
+
           if (errors.length > 0) {
             return reply.code(400).send({
               error: 'Invalid relationship query',
@@ -48,21 +48,21 @@ class RelationshipMiddleware {
               details: errors
             });
           }
-          
+
           // Store parsed query in request context
           request.relationshipQuery = selectQuery;
         }
 
         // Parse filters including relationship filters
-        const { filters, relationshipFilters, specialFilters } = 
-          this.filterParser.parseFilters(collectionName, request.query);
-        
+        const { filters, relationshipFilters, specialFilters }
+          = this.filterParser.parseFilters(collectionName, request.query);
+
         // Validate filters
         const filterErrors = this.filterParser.validateFilters(
-          collectionName, 
+          collectionName,
           request.query
         );
-        
+
         if (filterErrors.length > 0) {
           return reply.code(400).send({
             error: 'Invalid filters',
@@ -70,14 +70,13 @@ class RelationshipMiddleware {
             details: filterErrors
           });
         }
-        
+
         // Store parsed filters in request context
         request.parsedFilters = {
           filters,
           relationshipFilters,
           specialFilters
         };
-        
       } catch (error) {
         request.log.error('Relationship parsing failed:', error);
         return reply.code(500).send({
@@ -95,31 +94,31 @@ class RelationshipMiddleware {
   validateRelationshipPermissions() {
     return async (request, reply) => {
       try {
-        const collectionName = request.params.collection || 
-                               request.routerPath.split('/').pop();
-        
+        const collectionName = request.params.collection
+                               || request.routerPath.split('/').pop();
+
         if (!request.relationshipQuery) {
           return; // No relationships to validate
         }
 
         const userRole = request.user?.role;
         const schema = this.schemaLoader.getSchema(collectionName);
-        
+
         // Check permissions for each relationship
         for (const field of request.relationshipQuery.fields) {
           if (field.type === 'relationship' || field.type === 'aggregate') {
             const relationName = field.relationName || field.alias;
             const relationship = schema?.relationships?.[relationName];
-            
+
             if (relationship) {
               // Check if user has permission to access this relationship
               const hasPermission = this.checkRelationshipPermission(
-                userRole, 
-                relationship, 
+                userRole,
+                relationship,
                 collectionName,
                 relationName
               );
-              
+
               if (!hasPermission) {
                 return reply.code(403).send({
                   error: 'Insufficient permissions',
@@ -131,7 +130,6 @@ class RelationshipMiddleware {
             }
           }
         }
-        
       } catch (error) {
         request.log.error('Relationship permission validation failed:', error);
         return reply.code(500).send({
@@ -155,11 +153,11 @@ class RelationshipMiddleware {
     // In the future, you could add relationship-specific permissions
     const targetSchema = this.schemaLoader.getSchema(relationship.collection);
     const targetPermissions = targetSchema?.mongorest?.permissions;
-    
+
     if (!targetPermissions) {
       return true; // No restrictions defined
     }
-    
+
     // Check read permission on target collection
     const readRoles = targetPermissions.read || [];
     return readRoles.includes(userRole) || readRoles.includes('*');
@@ -179,7 +177,7 @@ class RelationshipMiddleware {
       try {
         const cacheKey = this.generateCacheKey(request);
         const cached = await cacheClient.get(cacheKey);
-        
+
         if (cached) {
           const cachedData = JSON.parse(cached);
           return reply.send({
@@ -192,10 +190,9 @@ class RelationshipMiddleware {
             }
           });
         }
-        
+
         // Store cache key for later use
         request.cacheKey = cacheKey;
-        
       } catch (error) {
         request.log.warn('Cache check failed:', error);
         // Continue without caching
@@ -209,9 +206,9 @@ class RelationshipMiddleware {
    * @returns {string} Cache key
    */
   generateCacheKey(request) {
-    const collection = request.params.collection || 
-                      request.routerPath.split('/').pop();
-    
+    const collection = request.params.collection
+                      || request.routerPath.split('/').pop();
+
     const keyData = {
       collection,
       select: request.query.select,
@@ -223,11 +220,11 @@ class RelationshipMiddleware {
       limit: request.query.limit,
       userRole: request.user?.role
     };
-    
+
     const keyString = JSON.stringify(keyData, Object.keys(keyData).sort());
     const crypto = require('crypto');
     const hash = crypto.createHash('md5').update(keyString).digest('hex');
-    
+
     return `mongorest:relationships:${collection}:${hash}`;
   }
 
@@ -263,7 +260,7 @@ class RelationshipMiddleware {
       };
 
       request.log.info('Relationship query executed', logData);
-      
+
       // Store for potential analytics
       request.relationshipQueryLog = logData;
     };
@@ -277,7 +274,7 @@ class RelationshipMiddleware {
  */
 function createRelationshipMiddleware(schemaLoader) {
   const middleware = new RelationshipMiddleware(schemaLoader);
-  
+
   return {
     parseRelationships: middleware.parseRelationships.bind(middleware),
     validateRelationshipPermissions: middleware.validateRelationshipPermissions.bind(middleware),
@@ -286,7 +283,7 @@ function createRelationshipMiddleware(schemaLoader) {
   };
 }
 
-module.exports = {
+export {
   RelationshipMiddleware,
   createRelationshipMiddleware
 };

@@ -58,10 +58,10 @@ async function healthRoutes(fastify, options) {
   }, async (request, reply) => {
     try {
       const startTime = Date.now();
-      
+
       // Check database health
       const dbHealth = await dbManager.healthCheck();
-      
+
       // Check memory usage
       const memoryUsage = process.memoryUsage();
       const memoryInfo = {
@@ -93,7 +93,7 @@ async function healthRoutes(fastify, options) {
 
       // Determine overall status
       const overallStatus = dbHealth.status === 'connected' ? 'healthy' : 'degraded';
-      
+
       const responseTime = Date.now() - startTime;
 
       return {
@@ -117,7 +117,7 @@ async function healthRoutes(fastify, options) {
       };
     } catch (error) {
       fastify.log.error('Health check failed:', error);
-      
+
       return reply.code(503).send({
         status: 'unhealthy',
         timestamp: new Date().toISOString(),
@@ -153,22 +153,22 @@ async function healthRoutes(fastify, options) {
   }, async (request, reply) => {
     try {
       const startTime = Date.now();
-      
+
       // Test database connection and get stats
       const [healthCheck, dbStats, collections] = await Promise.all([
         dbManager.healthCheck(),
         dbManager.getStats(),
         dbManager.listCollections()
       ]);
-      
+
       const responseTime = Date.now() - startTime;
-      
+
       // Simple performance test - count documents in a small collection
       let performanceMetrics = null;
       try {
         const testStartTime = Date.now();
         const testCollection = collections.find(c => c.name !== 'system.indexes') || collections[0];
-        
+
         if (testCollection) {
           const collection = dbManager.collection(testCollection.name);
           await collection.countDocuments({}, { limit: 1000 });
@@ -216,7 +216,7 @@ async function healthRoutes(fastify, options) {
       };
     } catch (error) {
       fastify.log.error('Database health check failed:', error);
-      
+
       return reply.code(503).send({
         status: 'unhealthy',
         error: error.message,
@@ -262,9 +262,9 @@ async function healthRoutes(fastify, options) {
       for (const [name, schema] of schemaLoader.schemas) {
         try {
           // Create a minimal valid document for testing
-          const testDocument = this.createMinimalDocument(schema);
+          const testDocument = createMinimalDocument(schema); // Changed from this.createMinimalDocument
           const validation = schemaLoader.validateDocument(name, testDocument);
-          
+
           validationTests.push({
             collection: name,
             status: validation.valid ? 'valid' : 'invalid',
@@ -297,7 +297,7 @@ async function healthRoutes(fastify, options) {
       };
     } catch (error) {
       fastify.log.error('Schema health check failed:', error);
-      
+
       return reply.code(503).send({
         status: 'unhealthy',
         error: error.message,
@@ -326,9 +326,9 @@ async function healthRoutes(fastify, options) {
       // Check critical components
       const dbHealth = await dbManager.healthCheck();
       const schemasLoaded = schemaLoader.schemas.size > 0;
-      
+
       const isReady = dbHealth.status === 'connected' && schemasLoaded;
-      
+
       if (!isReady) {
         return reply.code(503).send({
           ready: false,
@@ -389,7 +389,7 @@ async function healthRoutes(fastify, options) {
       async (request, reply) => {
         try {
           await request.jwtVerify();
-          
+
           // Only admin users can access metrics
           if (request.user.role !== 'admin') {
             return reply.code(403).send({
@@ -450,7 +450,7 @@ async function healthRoutes(fastify, options) {
     const k = 1024;
     const sizes = ['Bytes', 'KB', 'MB', 'GB'];
     const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+    return `${parseFloat((bytes / Math.pow(k, i)).toFixed(2))} ${sizes[i]}`;
   }
 
   function formatUptime(seconds) {
@@ -458,7 +458,7 @@ async function healthRoutes(fastify, options) {
     const hours = Math.floor((seconds % 86400) / 3600);
     const minutes = Math.floor((seconds % 3600) / 60);
     const secs = Math.floor(seconds % 60);
-    
+
     if (days > 0) {
       return `${days}d ${hours}h ${minutes}m ${secs}s`;
     } else if (hours > 0) {
@@ -470,21 +470,21 @@ async function healthRoutes(fastify, options) {
     }
   }
 
-  this.createMinimalDocument = (schema) => {
+  const createMinimalDocument = (schema) => { // Changed from this.createMinimalDocument
     const document = {};
     const required = schema.required || [];
-    
+
     for (const field of required) {
       const property = schema.properties[field];
       if (property) {
-        document[field] = this.generateSampleValue(property);
+        document[field] = generateSampleValue(property); // Changed from this.generateSampleValue
       }
     }
-    
+
     return document;
   };
 
-  this.generateSampleValue = (property) => {
+  const generateSampleValue = (property) => { // Changed from this.generateSampleValue
     switch (property.type) {
       case 'string':
         if (property.format === 'email') return 'test@example.com';
@@ -506,4 +506,4 @@ async function healthRoutes(fastify, options) {
   };
 }
 
-module.exports = healthRoutes;
+export default healthRoutes;

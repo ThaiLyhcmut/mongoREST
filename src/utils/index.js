@@ -21,7 +21,7 @@ class Utils {
   // Date utilities
   static formatDate(date, format = 'iso') {
     if (!date) return null;
-    
+
     const d = new Date(date);
     if (isNaN(d.getTime())) return null;
 
@@ -41,7 +41,7 @@ class Utils {
 
   static parseDate(dateString) {
     if (!dateString) return null;
-    
+
     const date = new Date(dateString);
     return isNaN(date.getTime()) ? null : date;
   }
@@ -63,11 +63,11 @@ class Utils {
       .toString()
       .toLowerCase()
       .trim()
-      .replace(/\s+/g, '-')           // Replace spaces with -
-      .replace(/[^\w\-]+/g, '')       // Remove all non-word chars
-      .replace(/\-\-+/g, '-')         // Replace multiple - with single -
-      .replace(/^-+/, '')             // Trim - from start of text
-      .replace(/-+$/, '');            // Trim - from end of text
+      .replace(/\s+/g, '-') // Replace spaces with -
+      .replace(/[^\w\-]+/g, '') // Remove all non-word chars
+      .replace(/\-\-+/g, '-') // Replace multiple - with single -
+      .replace(/^-+/, '') // Trim - from start of text
+      .replace(/-+$/, ''); // Trim - from end of text
   }
 
   static camelCase(str) {
@@ -112,7 +112,7 @@ class Utils {
 
   static sanitizeInput(input) {
     if (typeof input !== 'string') return input;
-    
+
     return input
       .replace(/[<>]/g, '') // Remove potential HTML tags
       .trim();
@@ -144,7 +144,7 @@ class Utils {
     return array.sort((a, b) => {
       const aVal = typeof key === 'function' ? key(a) : a[key];
       const bVal = typeof key === 'function' ? key(b) : b[key];
-      
+
       if (aVal < bVal) return order === 'asc' ? -1 : 1;
       if (aVal > bVal) return order === 'asc' ? 1 : -1;
       return 0;
@@ -166,7 +166,7 @@ class Utils {
 
   static deepMerge(target, source) {
     const output = { ...target };
-    
+
     if (this.isObject(target) && this.isObject(source)) {
       Object.keys(source).forEach(key => {
         if (this.isObject(source[key])) {
@@ -180,7 +180,7 @@ class Utils {
         }
       });
     }
-    
+
     return output;
   }
 
@@ -215,14 +215,14 @@ class Utils {
   static setValueByPath(obj, path, value) {
     const keys = path.split('.');
     const lastKey = keys.pop();
-    
+
     const target = keys.reduce((current, key) => {
       if (!current[key] || typeof current[key] !== 'object') {
         current[key] = {};
       }
       return current[key];
     }, obj);
-    
+
     target[lastKey] = value;
     return obj;
   }
@@ -233,7 +233,7 @@ class Utils {
     const k = 1024;
     const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
     const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+    return `${parseFloat((bytes / Math.pow(k, i)).toFixed(2))} ${sizes[i]}`;
   }
 
   static formatNumber(num, locale = 'en-US') {
@@ -248,7 +248,7 @@ class Utils {
   }
 
   static formatPercentage(value, decimals = 2) {
-    return (value * 100).toFixed(decimals) + '%';
+    return `${(value * 100).toFixed(decimals)}%`;
   }
 
   // Error utilities
@@ -262,9 +262,9 @@ class Utils {
 
   static isMongoError(error) {
     return error.name && (
-      error.name.includes('Mongo') || 
-      error.name === 'BulkWriteError' ||
-      error.code === 11000 // Duplicate key error
+      error.name.includes('Mongo')
+      || error.name === 'BulkWriteError'
+      || error.code === 11000 // Duplicate key error
     );
   }
 
@@ -283,39 +283,39 @@ class Utils {
 
   static async retry(fn, maxRetries = 3, delay = 1000) {
     let lastError;
-    
+
     for (let i = 0; i <= maxRetries; i++) {
       try {
         return await fn();
       } catch (error) {
         lastError = error;
-        
+
         if (i === maxRetries) {
           throw error;
         }
-        
+
         await this.sleep(delay * Math.pow(2, i)); // Exponential backoff
       }
     }
-    
+
     throw lastError;
   }
 
   static async timeout(promise, ms) {
-    const timeoutPromise = new Promise((_, reject) => 
+    const timeoutPromise = new Promise((_, reject) =>
       setTimeout(() => reject(new Error('Operation timed out')), ms)
     );
-    
+
     return Promise.race([promise, timeoutPromise]);
   }
 
   // Query building utilities
   static buildMongoQuery(filters) {
     const query = {};
-    
+
     for (const [key, value] of Object.entries(filters)) {
       if (value === undefined || value === null) continue;
-      
+
       if (key.includes('.')) {
         // Nested field query
         query[key] = value;
@@ -330,17 +330,17 @@ class Utils {
         query[key] = value;
       }
     }
-    
+
     return query;
   }
 
   static buildSortQuery(sort, order = 'asc') {
     if (!sort) return {};
-    
+
     if (typeof sort === 'string') {
       return { [sort]: order === 'desc' ? -1 : 1 };
     }
-    
+
     if (Array.isArray(sort)) {
       const sortObj = {};
       sort.forEach(field => {
@@ -348,13 +348,13 @@ class Utils {
       });
       return sortObj;
     }
-    
+
     return sort;
   }
 
   static buildProjection(fields) {
     if (!fields) return {};
-    
+
     if (typeof fields === 'string') {
       const projection = {};
       fields.split(',').forEach(field => {
@@ -362,7 +362,7 @@ class Utils {
       });
       return projection;
     }
-    
+
     if (Array.isArray(fields)) {
       const projection = {};
       fields.forEach(field => {
@@ -370,7 +370,7 @@ class Utils {
       });
       return projection;
     }
-    
+
     return fields;
   }
 
@@ -387,20 +387,20 @@ class Utils {
   static hashString(str) {
     let hash = 0;
     if (str.length === 0) return hash;
-    
+
     for (let i = 0; i < str.length; i++) {
       const char = str.charCodeAt(i);
       hash = ((hash << 5) - hash) + char;
       hash = hash & hash; // Convert to 32-bit integer
     }
-    
+
     return hash;
   }
 
   static maskEmail(email) {
     const [username, domain] = email.split('@');
     if (username.length <= 2) return email;
-    
+
     const maskedUsername = username[0] + '*'.repeat(username.length - 2) + username[username.length - 1];
     return `${maskedUsername}@${domain}`;
   }
@@ -424,7 +424,7 @@ class Utils {
     const start = Date.now();
     const result = fn();
     const end = Date.now();
-    
+
     console.log(`${label} took ${end - start}ms`);
     return result;
   }
@@ -433,7 +433,7 @@ class Utils {
     const start = Date.now();
     const result = await fn();
     const end = Date.now();
-    
+
     console.log(`${label} took ${end - start}ms`);
     return result;
   }

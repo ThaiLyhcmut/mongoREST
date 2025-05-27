@@ -1,22 +1,22 @@
-const fs = require('fs').promises;
-const path = require('path');
-const Ajv = require('ajv');
-const addFormats = require('ajv-formats');
+import fs from 'fs/promises';
+import path from 'path';
+import Ajv from 'ajv';
+import addFormats from 'ajv-formats';
 
 class SchemaLoader {
   constructor() {
     this.schemas = new Map();
     this.functions = new Map();
-    this.validator = new Ajv({ 
+    this.validator = new Ajv({
       allErrors: true,
       verbose: true,
       strict: false,
       coerceTypes: true
     });
-    
+
     // Add format validation (email, date-time, etc.)
     addFormats(this.validator);
-    
+
     // Custom keywords for MongoDB ObjectId
     this.validator.addKeyword({
       keyword: 'objectId',
@@ -33,19 +33,19 @@ class SchemaLoader {
   async loadSchemas() {
     try {
       console.log('Loading schemas...');
-      
+
       // Load collection schemas
       await this.loadCollectionSchemas();
-      
+
       // Load function schemas
       await this.loadFunctionSchemas();
-      
+
       console.log(`✅ Loaded ${this.schemas.size} collection schemas`);
       console.log(`✅ Loaded ${this.functions.size} function definitions`);
-      
+
       // Validate all schemas
       this.validateLoadedSchemas();
-      
+
       return {
         collections: this.schemas.size,
         functions: this.functions.size
@@ -59,21 +59,21 @@ class SchemaLoader {
   async loadCollectionSchemas() {
     try {
       const files = await this.getJsonFiles(this.collectionsPath);
-      
+
       for (const file of files) {
         const filePath = path.join(this.collectionsPath, file);
         const schema = await this.loadJsonFile(filePath);
-        
+
         // Validate schema structure
         this.validateCollectionSchema(schema, file);
-        
+
         // Add to schemas map
         const collectionName = schema.collection || path.basename(file, '.json');
         this.schemas.set(collectionName, schema);
-        
+
         // Add schema to AJV validator
         this.validator.addSchema(schema, collectionName);
-        
+
         console.log(`  📄 Loaded collection schema: ${collectionName}`);
       }
     } catch (error) {
@@ -92,23 +92,23 @@ class SchemaLoader {
   async loadFunctionSchemasRecursively(dir) {
     try {
       const entries = await fs.readdir(dir, { withFileTypes: true });
-      
+
       for (const entry of entries) {
         const fullPath = path.join(dir, entry.name);
-        
+
         if (entry.isDirectory()) {
           // Recursively load from subdirectories
           await this.loadFunctionSchemasRecursively(fullPath);
         } else if (entry.isFile() && entry.name.endsWith('.json')) {
           const functionDef = await this.loadJsonFile(fullPath);
-          
+
           // Validate function structure
           this.validateFunctionSchema(functionDef, entry.name);
-          
+
           // Add to functions map
           const functionName = functionDef.name || path.basename(entry.name, '.json');
           this.functions.set(functionName, functionDef);
-          
+
           console.log(`  🔧 Loaded function: ${functionName}`);
         }
       }
@@ -146,7 +146,7 @@ class SchemaLoader {
   validateCollectionSchema(schema, filename) {
     const requiredFields = ['title', 'type', 'properties'];
     const missingFields = requiredFields.filter(field => !schema[field]);
-    
+
     if (missingFields.length > 0) {
       throw new Error(`Schema ${filename} missing required fields: ${missingFields.join(', ')}`);
     }
@@ -174,7 +174,7 @@ class SchemaLoader {
   validateFunctionSchema(functionDef, filename) {
     const requiredFields = ['name', 'description', 'method', 'steps'];
     const missingFields = requiredFields.filter(field => !functionDef[field]);
-    
+
     if (missingFields.length > 0) {
       throw new Error(`Function ${filename} missing required fields: ${missingFields.join(', ')}`);
     }
@@ -202,7 +202,7 @@ class SchemaLoader {
     }
 
     const validStepTypes = [
-      'find', 'findOne', 'insertOne', 'insertMany', 
+      'find', 'findOne', 'insertOne', 'insertMany',
       'updateOne', 'updateMany', 'deleteOne', 'deleteMany',
       'aggregate', 'countDocuments', 'distinct',
       'transform', 'http', 'condition'
@@ -273,7 +273,7 @@ class SchemaLoader {
   validateRelationship(relationship, relationName, filename) {
     const requiredFields = ['type', 'collection', 'localField', 'foreignField'];
     const missingFields = requiredFields.filter(field => !relationship[field]);
-    
+
     if (missingFields.length > 0) {
       throw new Error(`Schema ${filename} relationship '${relationName}' missing required fields: ${missingFields.join(', ')}`);
     }
@@ -288,7 +288,7 @@ class SchemaLoader {
     if (relationship.type === 'manyToMany') {
       const requiredM2MFields = ['through', 'throughLocalField', 'throughForeignField'];
       const missingM2MFields = requiredM2MFields.filter(field => !relationship[field]);
-      
+
       if (missingM2MFields.length > 0) {
         throw new Error(`Schema ${filename} manyToMany relationship '${relationName}' missing required fields: ${missingM2MFields.join(', ')}`);
       }
@@ -310,7 +310,7 @@ class SchemaLoader {
 
   validateLoadedSchemas() {
     console.log('Validating loaded schemas...');
-    
+
     let validSchemas = 0;
     let validFunctions = 0;
 
@@ -371,6 +371,14 @@ class SchemaLoader {
     }));
   }
 
+  getCollectionNames() {
+    return Array.from(this.schemas.keys());
+  }
+
+  getCollectionSchema(collectionName) {
+    return this.schemas.get(collectionName);
+  }
+
   validateDocument(collectionName, document) {
     const schema = this.getSchema(collectionName);
     if (!schema) {
@@ -419,14 +427,14 @@ class SchemaLoader {
   // Hot reload functionality for development
   async reloadSchemas() {
     console.log('Reloading schemas...');
-    
+
     // Clear existing schemas
     this.schemas.clear();
     this.functions.clear();
-    
+
     // Reload all schemas
     return await this.loadSchemas();
   }
 }
 
-module.exports = SchemaLoader;
+export default SchemaLoader;

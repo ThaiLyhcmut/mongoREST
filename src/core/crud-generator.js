@@ -1,6 +1,6 @@
-const { ObjectId } = require('mongodb');
-const RelationshipQueryParser = require('./relationship-parser');
-const RelationshipFilterParser = require('./relationship-filter');
+import { ObjectId } from 'mongodb';
+import RelationshipQueryParser from './relationship-parser.js';
+import RelationshipFilterParser from './relationship-filter.js';
 
 class CRUDGenerator {
   constructor(schemaLoader, dbManager) {
@@ -14,12 +14,12 @@ class CRUDGenerator {
   // Generate all CRUD routes for collections
   async registerRoutes(fastify) {
     console.log('Generating CRUD routes...');
-    
+
     for (const [collectionName, schema] of this.schemas) {
       await this.createCRUDRoutes(fastify, collectionName, schema);
       console.log(`  🔄 Generated CRUD routes for: ${collectionName}`);
     }
-    
+
     console.log(`✅ Generated CRUD routes for ${this.schemas.size} collections`);
   }
 
@@ -55,9 +55,9 @@ class CRUDGenerator {
       schema: this.getCreateSchema(collectionName, schema),
       preHandler: [
         fastify.authenticate,
-        fastify.parseMongoScript(),
+        fastify.parseMongoScript, 
         fastify.authorizeCollection('create'),
-        fastify.validateMethodOperation()
+        fastify.validateMethodOperation 
       ]
     }, async (request, reply) => {
       return this.handleCreate(request, reply, collectionName, schema);
@@ -68,9 +68,9 @@ class CRUDGenerator {
       schema: this.getReplaceSchema(collectionName, schema),
       preHandler: [
         fastify.authenticate,
-        fastify.parseMongoScript(),
+        fastify.parseMongoScript, // Corrected: removed ()
         fastify.authorizeCollection('update'),
-        fastify.validateMethodOperation()
+        fastify.validateMethodOperation // Corrected: removed ()
       ]
     }, async (request, reply) => {
       return this.handleReplace(request, reply, collectionName, schema);
@@ -81,8 +81,9 @@ class CRUDGenerator {
       schema: this.getUpdateSchema(collectionName, schema),
       preHandler: [
         fastify.authenticate,
+        fastify.parseMongoScript, // Corrected: removed ()
         fastify.authorizeCollection('update'),
-        fastify.validateMethodOperation()
+        fastify.validateMethodOperation // Corrected: removed ()
       ]
     }, async (request, reply) => {
       return this.handleUpdate(request, reply, collectionName, schema);
@@ -107,12 +108,12 @@ class CRUDGenerator {
       const startTime = Date.now();
       const mongorestConfig = schema.mongorest || {};
       const { select, sort, order, page, limit, ...filterParams } = request.query;
-      
+
       // Parse relationship query if select parameter exists
       let selectQuery = null;
       if (select) {
         selectQuery = this.relationshipParser.parseSelectQuery(collectionName, select);
-        
+
         // Validate relationship query
         const errors = this.relationshipParser.validateRelationshipQuery(collectionName, selectQuery.fields);
         if (errors.length > 0) {
@@ -123,10 +124,10 @@ class CRUDGenerator {
           });
         }
       }
-      
+
       // Parse filters including relationship filters
       const { filters, relationshipFilters, specialFilters } = this.filterParser.parseFilters(collectionName, filterParams);
-      
+
       // Validate filters
       const filterErrors = this.filterParser.validateFilters(collectionName, filterParams);
       if (filterErrors.length > 0) {
@@ -140,47 +141,47 @@ class CRUDGenerator {
       let result;
       let pipeline = [];
       let usedAggregation = false;
-      
+
       // Use aggregation if we have relationships or relationship filters
       if (selectQuery?.hasRelationships || Object.keys(relationshipFilters).length > 0) {
         usedAggregation = true;
-        
+
         // Build filtered pipeline
         pipeline = this.filterParser.buildFilteredPipeline(
-          collectionName, 
-          selectQuery?.fields || [], 
-          filters, 
-          relationshipFilters, 
+          collectionName,
+          selectQuery?.fields || [],
+          filters,
+          relationshipFilters,
           specialFilters
         );
-        
+
         // Add sorting
         const sortStage = this.filterParser.buildSortStage(sort, order, schema);
         if (sortStage) {
           pipeline.push(sortStage);
         }
-        
+
         // Add pagination
         const paginationStages = this.filterParser.buildPaginationStages(
-          parseInt(page), 
-          parseInt(limit), 
+          parseInt(page),
+          parseInt(limit),
           schema
         );
         pipeline.push(...paginationStages);
-        
+
         // Execute aggregation
         const collection = this.dbManager.collection(collectionName);
         const documents = await collection.aggregate(pipeline).toArray();
-        
+
         // Get total count for pagination (separate query)
         const countPipeline = pipeline.slice(0, -2); // Remove limit and skip
         countPipeline.push({ $count: 'total' });
         const countResult = await collection.aggregate(countPipeline).toArray();
         const totalCount = countResult[0]?.total || 0;
-        
+
         const actualLimit = Math.min(parseInt(limit) || mongorestConfig.defaultLimit || 50, mongorestConfig.maxLimit || 1000);
         const actualPage = Math.max(parseInt(page) || 1, 1);
-        
+
         result = {
           documents,
           pagination: {
@@ -199,7 +200,7 @@ class CRUDGenerator {
           limit: 50,
           skip: 0
         };
-        
+
         // Apply sorting
         if (sort) {
           const direction = ['desc', '-1'].includes(order) ? -1 : 1;
@@ -207,22 +208,22 @@ class CRUDGenerator {
         } else if (mongorestConfig.defaultSort) {
           options.sort = mongorestConfig.defaultSort;
         }
-        
+
         // Apply limits
         const maxLimit = mongorestConfig.maxLimit || 1000;
         const defaultLimit = mongorestConfig.defaultLimit || 50;
         options.limit = Math.min(parseInt(limit) || defaultLimit, maxLimit);
-        
+
         // Apply pagination
         const actualPage = Math.max(parseInt(page) || 1, 1);
         options.skip = (actualPage - 1) * options.limit;
-        
+
         // Execute query with pagination
         result = await this.dbManager.findWithPagination(collectionName, filters, options);
       }
-      
+
       const executionTime = Date.now() - startTime;
-      
+
       return {
         success: true,
         data: result.documents,
@@ -248,7 +249,7 @@ class CRUDGenerator {
     try {
       const startTime = Date.now();
       const { id } = request.params;
-      
+
       // Validate ObjectId
       if (!this.dbManager.isValidObjectId(id)) {
         return reply.code(400).send({
@@ -259,7 +260,7 @@ class CRUDGenerator {
 
       const collection = this.dbManager.collection(collectionName);
       const document = await collection.findOne({ _id: new ObjectId(id) });
-      
+
       if (!document) {
         return reply.code(404).send({
           error: 'Document not found',
@@ -268,7 +269,7 @@ class CRUDGenerator {
       }
 
       const executionTime = Date.now() - startTime;
-      
+
       return {
         success: true,
         data: document,
@@ -290,7 +291,7 @@ class CRUDGenerator {
     try {
       const startTime = Date.now();
       const document = request.body;
-      
+
       // Validate document against schema
       const validation = this.schemaLoader.validateDocument(collectionName, document);
       if (!validation.valid) {
@@ -311,15 +312,15 @@ class CRUDGenerator {
 
       const collection = this.dbManager.collection(collectionName);
       const result = await collection.insertOne(document);
-      
+
       // Execute hooks after create
-      await this.executeHooks('afterCreate', collectionName, schema, { 
-        document: { ...document, _id: result.insertedId }, 
-        user: request.user 
+      await this.executeHooks('afterCreate', collectionName, schema, {
+        document: { ...document, _id: result.insertedId },
+        user: request.user
       });
 
       const executionTime = Date.now() - startTime;
-      
+
       return {
         success: true,
         data: {
@@ -345,7 +346,7 @@ class CRUDGenerator {
       const startTime = Date.now();
       const { id } = request.params;
       const document = request.body;
-      
+
       // Validate ObjectId
       if (!this.dbManager.isValidObjectId(id)) {
         return reply.code(400).send({
@@ -373,7 +374,7 @@ class CRUDGenerator {
 
       const collection = this.dbManager.collection(collectionName);
       const result = await collection.replaceOne({ _id: new ObjectId(id) }, document);
-      
+
       if (result.matchedCount === 0) {
         return reply.code(404).send({
           error: 'Document not found',
@@ -385,7 +386,7 @@ class CRUDGenerator {
       await this.executeHooks('afterUpdate', collectionName, schema, { document, user: request.user });
 
       const executionTime = Date.now() - startTime;
-      
+
       return {
         success: true,
         data: document,
@@ -409,7 +410,7 @@ class CRUDGenerator {
       const startTime = Date.now();
       const { id } = request.params;
       const updates = request.body;
-      
+
       // Validate ObjectId
       if (!this.dbManager.isValidObjectId(id)) {
         return reply.code(400).send({
@@ -427,15 +428,15 @@ class CRUDGenerator {
       };
 
       // Execute hooks before update
-      await this.executeHooks('beforeUpdate', collectionName, schema, { 
+      await this.executeHooks('beforeUpdate', collectionName, schema, {
         filter: { _id: new ObjectId(id) },
         update: updateDoc,
-        user: request.user 
+        user: request.user
       });
 
       const collection = this.dbManager.collection(collectionName);
       const result = await collection.updateOne({ _id: new ObjectId(id) }, updateDoc);
-      
+
       if (result.matchedCount === 0) {
         return reply.code(404).send({
           error: 'Document not found',
@@ -447,13 +448,13 @@ class CRUDGenerator {
       const updatedDocument = await collection.findOne({ _id: new ObjectId(id) });
 
       // Execute hooks after update
-      await this.executeHooks('afterUpdate', collectionName, schema, { 
-        document: updatedDocument, 
-        user: request.user 
+      await this.executeHooks('afterUpdate', collectionName, schema, {
+        document: updatedDocument,
+        user: request.user
       });
 
       const executionTime = Date.now() - startTime;
-      
+
       return {
         success: true,
         data: updatedDocument,
@@ -476,7 +477,7 @@ class CRUDGenerator {
     try {
       const startTime = Date.now();
       const { id } = request.params;
-      
+
       // Validate ObjectId
       if (!this.dbManager.isValidObjectId(id)) {
         return reply.code(400).send({
@@ -488,7 +489,7 @@ class CRUDGenerator {
       // Get document before deletion (for hooks)
       const collection = this.dbManager.collection(collectionName);
       const document = await collection.findOne({ _id: new ObjectId(id) });
-      
+
       if (!document) {
         return reply.code(404).send({
           error: 'Document not found',
@@ -505,7 +506,7 @@ class CRUDGenerator {
       await this.executeHooks('afterDelete', collectionName, schema, { document, user: request.user });
 
       const executionTime = Date.now() - startTime;
-      
+
       return {
         success: true,
         data: {
@@ -529,13 +530,13 @@ class CRUDGenerator {
   async executeHooks(hookType, collectionName, schema, context) {
     const mongorestConfig = schema.mongorest || {};
     const hooks = mongorestConfig.hooks || {};
-    
+
     if (!hooks[hookType]) {
       return;
     }
 
     const hookFunctions = Array.isArray(hooks[hookType]) ? hooks[hookType] : [hooks[hookType]];
-    
+
     for (const hookName of hookFunctions) {
       try {
         await this.executeHook(hookName, context);
@@ -566,7 +567,7 @@ class CRUDGenerator {
           context.document.updatedAt = now;
         }
         break;
-        
+
       case 'validateEmail':
         if (context.document?.email) {
           const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -575,7 +576,7 @@ class CRUDGenerator {
           }
         }
         break;
-        
+
       // Add more hook implementations as needed
     }
   }
@@ -592,9 +593,9 @@ class CRUDGenerator {
           limit: { type: 'integer', minimum: 1, maximum: 1000, default: 50 },
           sort: { type: 'string', description: 'Field to sort by' },
           order: { type: 'string', enum: ['asc', 'desc', '1', '-1'], default: 'asc' },
-          select: { 
-            type: 'string', 
-            description: 'PostgREST-style field selection with relationships (e.g., "id,title,author(*),category(name,slug)")' 
+          select: {
+            type: 'string',
+            description: 'PostgREST-style field selection with relationships (e.g., "id,title,author(*),category(name,slug)")'
           },
           search: { type: 'string', description: 'Text search query' },
           searchFields: { type: 'string', description: 'Comma-separated list of fields to search in' }
@@ -806,4 +807,4 @@ class CRUDGenerator {
   }
 }
 
-module.exports = CRUDGenerator;
+export default CRUDGenerator;
