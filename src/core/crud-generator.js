@@ -126,7 +126,6 @@ class CRUDGenerator {
       
       // Parse filters including relationship filters
       const { filters, relationshipFilters, specialFilters } = this.filterParser.parseFilters(collectionName, filterParams);
-      
       // Validate filters
       const filterErrors = this.filterParser.validateFilters(collectionName, filterParams);
       if (filterErrors.length > 0) {
@@ -142,7 +141,7 @@ class CRUDGenerator {
       let usedAggregation = false;
       
       // Use aggregation if we have relationships or relationship filters
-      if (selectQuery?.hasRelationships || Object.keys(relationshipFilters).length > 0) {
+      if (selectQuery?.hasRelationships || Object.keys(relationshipFilters).length > 0 || specialFilters) {
         usedAggregation = true;
         
         // Build filtered pipeline

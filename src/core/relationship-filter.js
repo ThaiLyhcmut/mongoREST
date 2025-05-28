@@ -222,7 +222,7 @@ class RelationshipFilterParser {
 
     if (fieldsToSearch.length === 0) {
       // Try text index search if available
-      return { $match: { $text: { $search: searchTerm } } };
+      return { $match: { fieldName: { $regex: searchTerm, $options: "i" } } };
     }
 
     // Build regex search across multiple fields
