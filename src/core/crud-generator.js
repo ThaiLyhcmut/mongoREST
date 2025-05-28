@@ -606,7 +606,7 @@ class CRUDGenerator {
           type: 'object',
           properties: {
             success: { type: 'boolean' },
-            data: { type: 'array', items: schema },
+            data: { type: 'array', items: this.cleanSchemaForValidation(schema) },
             meta: {
               type: 'object',
               properties: {
@@ -644,7 +644,7 @@ class CRUDGenerator {
           type: 'object',
           properties: {
             success: { type: 'boolean' },
-            data: schema,
+            data: this.cleanSchemaForValidation(schema),
             meta: {
               type: 'object',
               properties: {
@@ -662,7 +662,7 @@ class CRUDGenerator {
 
   // Generate Fastify schema for CREATE endpoint
   getCreateSchema(collectionName, schema) {
-    const bodySchema = { ...schema };
+    const bodySchema = this.cleanSchemaForValidation(schema);
     delete bodySchema.properties._id; // ID should not be provided in create
 
     return {
@@ -674,7 +674,7 @@ class CRUDGenerator {
           type: 'object',
           properties: {
             success: { type: 'boolean' },
-            data: schema,
+            data: this.cleanSchemaForValidation(schema),
             meta: {
               type: 'object',
               properties: {
@@ -692,7 +692,7 @@ class CRUDGenerator {
 
   // Generate Fastify schema for REPLACE endpoint
   getReplaceSchema(collectionName, schema) {
-    const bodySchema = { ...schema };
+    const bodySchema = this.cleanSchemaForValidation(schema);
     delete bodySchema.properties._id; // ID comes from URL parameter
 
     return {
@@ -711,7 +711,7 @@ class CRUDGenerator {
           type: 'object',
           properties: {
             success: { type: 'boolean' },
-            data: schema,
+            data: this.cleanSchemaForValidation(schema),
             meta: {
               type: 'object',
               properties: {
@@ -749,7 +749,7 @@ class CRUDGenerator {
           type: 'object',
           properties: {
             success: { type: 'boolean' },
-            data: schema,
+            data: this.cleanSchemaForValidation(schema),
             meta: {
               type: 'object',
               properties: {
@@ -803,6 +803,26 @@ class CRUDGenerator {
         }
       }
     };
+  }
+
+  // Helper method to clean schema for Fastify validation
+  cleanSchemaForValidation(schema) {
+    // Create a clean copy of the schema without custom properties
+    const cleanSchema = {
+      type: schema.type,
+      properties: { ...schema.properties },
+      required: schema.required ? [...schema.required] : undefined,
+      additionalProperties: schema.additionalProperties
+    };
+
+    // Remove undefined fields
+    Object.keys(cleanSchema).forEach(key => {
+      if (cleanSchema[key] === undefined) {
+        delete cleanSchema[key];
+      }
+    });
+
+    return cleanSchema;
   }
 }
 

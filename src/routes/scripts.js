@@ -19,9 +19,9 @@ async function scriptRoutes(fastify, options) {
               options: {
                 type: 'object',
                 properties: {
-                  timeout: { type: 'integer', default: 30000 },
-                  dryRun: { type: 'boolean', default: false },
-                  explain: { type: 'boolean', default: false }
+                  timeout: { type: 'integer' },
+                  dryRun: { type: 'boolean' },
+                  explain: { type: 'boolean' }
                 }
               }
             },

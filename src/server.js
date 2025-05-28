@@ -158,10 +158,10 @@ class MongoRESTServer {
   }
 
   registerMiddleware() {
-    // Add context to request
-    this.fastify.decorateRequest('context', null);
+    // Add mongorest context to request
+    this.fastify.decorateRequest('mongorest', null);
     this.fastify.addHook('onRequest', async (request) => {
-      request.context = {
+      request.mongorest = {
         schemaLoader: this.schemaLoader,
         dbManager: this.dbManager,
         authManager: this.authManager,
