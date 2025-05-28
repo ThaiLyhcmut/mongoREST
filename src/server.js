@@ -117,16 +117,20 @@ class MongoRESTServer {
 
   async registerPlugins(config) {
     // CORS plugin
-    await this.fastify.register(require('@fastify/cors'), config.cors);
+    const fastifyCors = await import('@fastify/cors');
+    await this.fastify.register(fastifyCors.default, config.cors);
 
     // Helmet for security
-    await this.fastify.register(require('@fastify/helmet'));
+    const fastifyHelmet = await import('@fastify/helmet');
+    await this.fastify.register(fastifyHelmet.default);
 
     // Rate limiting
-    await this.fastify.register(require('@fastify/rate-limit'), config.rateLimit);
+    const fastifyRateLimit = await import('@fastify/rate-limit');
+    await this.fastify.register(fastifyRateLimit.default, config.rateLimit);
 
     // JWT plugin
-    await this.fastify.register(require('@fastify/jwt'), {
+    const fastifyJwt = await import('@fastify/jwt');
+    await this.fastify.register(fastifyJwt.default, {
       secret: process.env.JWT_SECRET,
       sign: {
         algorithm: 'HS256',
@@ -143,8 +147,11 @@ class MongoRESTServer {
 
     // Swagger documentation
     if (config.swagger && config.swagger.enabled) {
-      await this.fastify.register(require('@fastify/swagger'), config.swagger);
-      await this.fastify.register(require('@fastify/swagger-ui'), {
+      const fastifySwagger = await import('@fastify/swagger');
+      const fastifySwaggerUi = await import('@fastify/swagger-ui');
+      
+      await this.fastify.register(fastifySwagger.default, config.swagger);
+      await this.fastify.register(fastifySwaggerUi.default, {
         routePrefix: config.swagger.routePrefix || '/docs'
       });
     }
@@ -304,23 +311,29 @@ class MongoRESTServer {
       const port = parseInt(process.env.PORT) || 3000;
 
       console.log(`Starting MongoREST server on http://${host}:${port}...`);
-      await this.fastify.listen({ host, port });
-      console.log(`MongoREST server started at http://${host}:${port}`);
       
-      this.fastify.log.info(`MongoREST server started at http://${host}:${port}`);
-      this.fastify.log.info(`API Documentation: http://${host}:${port}/docs`);
-      this.fastify.log.info(`Health Check: http://${host}:${port}/health`);
+      // For Fastify v4, use the correct listen syntax
+      await this.fastify.listen({ 
+        host: host,
+        port: port 
+      });
+      
+      console.log(`✅ MongoREST server started at http://${host}:${port}`);
+      this.fastify.log.info(`🚀 MongoREST server started at http://${host}:${port}`);
+      this.fastify.log.info(`📚 API Documentation: http://${host}:${port}/docs`);
+      this.fastify.log.info(`❤️ Health Check: http://${host}:${port}/health`);
       
       // Log available collections and functions
       const collections = Array.from(this.schemaLoader.schemas.keys());
       const functions = Array.from(this.schemaLoader.functions.keys());
       
-      this.fastify.log.info(`Available collections: ${collections.join(', ')}`);
-      this.fastify.log.info(`Available functions: ${functions.join(', ')}`);
+      this.fastify.log.info(`📦 Available collections: ${collections.join(', ')}`);
+      this.fastify.log.info(`⚙️ Available functions: ${functions.join(', ')}`);
 
     } catch (error) {
+      console.error('❌ Failed to start server:', error);
       this.fastify.log.error('Failed to start server:', error);
-      process.exit(1);
+      throw error;
     }
   }
 
@@ -336,9 +349,12 @@ class MongoRESTServer {
   }
 }
 
+// Global server variable for shutdown handlers
+let server = null;
+
 // Handle graceful shutdown
 process.on('SIGINT', async () => {
-  console.log('\\nReceived SIGINT, shutting down gracefully...');
+  console.log('\nReceived SIGINT, shutting down gracefully...');
   if (server) {
     await server.stop();
   }
@@ -346,7 +362,7 @@ process.on('SIGINT', async () => {
 });
 
 process.on('SIGTERM', async () => {
-  console.log('\\nReceived SIGTERM, shutting down gracefully...');
+  console.log('\nReceived SIGTERM, shutting down gracefully...');
   if (server) {
     await server.stop();
   }
@@ -354,8 +370,9 @@ process.on('SIGTERM', async () => {
 });
 
 // Start server if this file is run directly
-if (require.main === module) {
-  const server = new MongoRESTServer();
+if (import.meta.url === `file:///${process.argv[1].replace(/\\/g, '/')}` || 
+    import.meta.url.endsWith('server.js')) {
+  server = new MongoRESTServer();
   
   server.initialize()
     .then(() => server.start())
@@ -365,4 +382,4 @@ if (require.main === module) {
     });
 }
 
-module.exports = MongoRESTServer;
+export default MongoRESTServer;

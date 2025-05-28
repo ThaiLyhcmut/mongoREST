@@ -1,4 +1,4 @@
-const { ObjectId } = require('mongodb');
+import { ObjectId } from 'mongodb';
 
 class MongoScriptParser {
   constructor() {
@@ -360,4 +360,4 @@ class MongoScriptParser {
   }
 }
 
-module.exports = MongoScriptParser;
+export default MongoScriptParser;

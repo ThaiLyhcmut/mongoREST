@@ -2,6 +2,7 @@
   "name": "mongorest",
   "version": "1.0.0",
   "description": "PostgREST-inspired REST API layer for MongoDB using Fastify",
+  "type": "module",
   "main": "src/server.js",
   "scripts": {
     "start": "node src/server.js",

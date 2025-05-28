@@ -1,4 +1,4 @@
-const MongoScriptParser = require('../core/script-parser');
+import MongoScriptParser from '../core/script-parser.js';
 
 class ScriptParsingMiddleware {
   constructor() {
@@ -358,4 +358,4 @@ class ScriptParsingMiddleware {
   }
 }
 
-module.exports = ScriptParsingMiddleware;
+export default ScriptParsingMiddleware;

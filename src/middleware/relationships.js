@@ -1,5 +1,6 @@
-const RelationshipQueryParser = require('../core/relationship-parser');
-const RelationshipFilterParser = require('../core/relationship-filter');
+import RelationshipQueryParser from '../core/relationship-parser.js';
+import RelationshipFilterParser from '../core/relationship-filter.js';
+import crypto from 'crypto';
 
 /**
  * Relationship middleware for parsing and validating relationship queries
@@ -225,7 +226,6 @@ class RelationshipMiddleware {
     };
     
     const keyString = JSON.stringify(keyData, Object.keys(keyData).sort());
-    const crypto = require('crypto');
     const hash = crypto.createHash('md5').update(keyString).digest('hex');
     
     return `mongorest:relationships:${collection}:${hash}`;
@@ -286,7 +286,7 @@ function createRelationshipMiddleware(schemaLoader) {
   };
 }
 
-module.exports = {
+export {
   RelationshipMiddleware,
   createRelationshipMiddleware
 };

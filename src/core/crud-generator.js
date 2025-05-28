@@ -1,6 +1,6 @@
-const { ObjectId } = require('mongodb');
-const RelationshipQueryParser = require('./relationship-parser');
-const RelationshipFilterParser = require('./relationship-filter');
+import { ObjectId } from 'mongodb';
+import RelationshipQueryParser from './relationship-parser.js';
+import RelationshipFilterParser from './relationship-filter.js';
 
 class CRUDGenerator {
   constructor(schemaLoader, dbManager) {
@@ -806,4 +806,4 @@ class CRUDGenerator {
   }
 }
 
-module.exports = CRUDGenerator;
+export default CRUDGenerator;

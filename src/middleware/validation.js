@@ -450,4 +450,4 @@ class ValidationManager {
   }
 }
 
-module.exports = ValidationManager;
+export default ValidationManager;

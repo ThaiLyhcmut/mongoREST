@@ -357,29 +357,6 @@ async function crudRoutes(fastify, options) {
     }
   });
 
-  // Helper method for bulk operations
-  this.executeBulkOperation = async (operation, session = null) => {
-    const collection = dbManager.collection(operation.collection);
-    const options = session ? { session } : {};
-
-    switch (operation.operation) {
-      case 'insertOne':
-        return await collection.insertOne(operation.data, options);
-      case 'insertMany':
-        return await collection.insertMany(operation.data, options);
-      case 'updateOne':
-        return await collection.updateOne(operation.filter, operation.update, options);
-      case 'updateMany':
-        return await collection.updateMany(operation.filter, operation.update, options);
-      case 'deleteOne':
-        return await collection.deleteOne(operation.filter, options);
-      case 'deleteMany':
-        return await collection.deleteMany(operation.filter, options);
-      default:
-        throw new Error(`Unsupported bulk operation: ${operation.operation}`);
-    }
-  };
-
   // Raw aggregation endpoint (for complex queries)
   fastify.post('/:collection/aggregate', {
     schema: {
@@ -450,4 +427,4 @@ async function crudRoutes(fastify, options) {
   });
 }
 
-module.exports = crudRoutes;
+export default crudRoutes;

@@ -1,4 +1,4 @@
-const { ObjectId } = require('mongodb');
+import { ObjectId } from 'mongodb';
 
 class FunctionExecutor {
   constructor(schemaLoader, dbManager) {
@@ -657,4 +657,4 @@ class FunctionExecutor {
   }
 }
 
-module.exports = FunctionExecutor;
+export default FunctionExecutor;

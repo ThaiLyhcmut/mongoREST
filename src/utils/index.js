@@ -1,5 +1,5 @@
 // Utility functions for MongoREST
-const { ObjectId } = require('mongodb');
+import { ObjectId } from 'mongodb';
 
 class Utils {
   // Object ID utilities
@@ -439,4 +439,4 @@ class Utils {
   }
 }
 
-module.exports = Utils;
+export default Utils;

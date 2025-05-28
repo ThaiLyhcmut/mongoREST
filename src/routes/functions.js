@@ -120,7 +120,7 @@ async function functionRoutes(fastify, options) {
           collections: [...new Set(functionDef.steps
             .filter(step => step.collection)
             .map(step => step.collection))],
-          estimatedExecutionTime: this.estimateExecutionTime(functionDef)
+          estimatedExecutionTime: estimateExecutionTime(functionDef)
         },
         meta: {
           lastModified: new Date().toISOString()
@@ -444,7 +444,7 @@ async function functionRoutes(fastify, options) {
     return parseInt(value) * multipliers[unit];
   }
 
-  this.estimateExecutionTime = (functionDef) => {
+  function estimateExecutionTime(functionDef) {
     // Simple estimation based on step types and count
     const stepTypeWeights = {
       find: 100,
@@ -467,7 +467,7 @@ async function functionRoutes(fastify, options) {
     }
 
     return `${estimatedTime}ms`;
-  };
+  }
 }
 
-module.exports = functionRoutes;
+export default functionRoutes;

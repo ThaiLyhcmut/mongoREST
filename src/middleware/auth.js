@@ -437,4 +437,4 @@ class AuthManager {
   }
 }
 
-module.exports = AuthManager;
+export default AuthManager;

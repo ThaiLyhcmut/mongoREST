@@ -1,4 +1,4 @@
-const { ObjectId } = require('mongodb');
+import { ObjectId } from 'mongodb';
 
 /**
  * RelationshipQueryParser - Parse PostgREST-style relationship queries
@@ -564,4 +564,4 @@ class RelationshipQueryParser {
   }
 }
 
-module.exports = RelationshipQueryParser;
+export default RelationshipQueryParser;

@@ -1,7 +1,12 @@
-const fs = require('fs').promises;
-const path = require('path');
-const Ajv = require('ajv');
-const addFormats = require('ajv-formats');
+import fs from 'fs/promises';
+import path from 'path';
+import Ajv from 'ajv';
+import addFormats from 'ajv-formats';
+import { fileURLToPath } from 'url';
+
+// ES module helpers
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 class SchemaLoader {
   constructor() {
@@ -429,4 +434,4 @@ class SchemaLoader {
   }
 }
 
-module.exports = SchemaLoader;
+export default SchemaLoader;

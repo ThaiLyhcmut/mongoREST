@@ -1,3 +1,5 @@
+import RelationshipQueryParser from './relationship-parser.js';
+
 /**
  * RelationshipFilterParser - Handle filtering on relationships
  * Supports PostgREST-style operators: eq, neq, gt, gte, lt, lte, in, nin, like, ilike
@@ -191,8 +193,7 @@ class RelationshipFilterParser {
 
     // Build relationship pipeline
     if (selectFields && selectFields.length > 0) {
-      const relationshipParser = require('./relationship-parser');
-      const parser = new relationshipParser(this.schemas);
+      const parser = new RelationshipQueryParser(this.schemas);
       const relationshipPipeline = parser.buildAggregationPipeline(collection, selectFields);
       pipeline.push(...relationshipPipeline);
     }
@@ -486,4 +487,4 @@ class RelationshipFilterParser {
   }
 }
 
-module.exports = RelationshipFilterParser;
+export default RelationshipFilterParser;

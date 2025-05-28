@@ -1,4 +1,38 @@
 // Health Check Routes - System monitoring and status endpoints
+
+// Helper functions for health checks
+const createMinimalDocument = (schema, generateSampleValue) => {
+  const document = {};
+  const required = schema.required || [];
+  
+  for (const field of required) {
+    const property = schema.properties[field];
+    if (property) {
+      document[field] = generateSampleValue(property);
+    }
+  }
+  
+  return document;
+};
+
+const generateSampleValue = (property) => {
+  switch (property.type) {
+    case 'string':
+      return property.enum ? property.enum[0] : 'sample';
+    case 'number':
+    case 'integer':
+      return property.minimum || 1;
+    case 'boolean':
+      return true;
+    case 'array':
+      return [];
+    case 'object':
+      return {};
+    default:
+      return null;
+  }
+};
+
 async function healthRoutes(fastify, options) {
   const { schemaLoader, dbManager, authManager } = fastify;
 
@@ -262,7 +296,7 @@ async function healthRoutes(fastify, options) {
       for (const [name, schema] of schemaLoader.schemas) {
         try {
           // Create a minimal valid document for testing
-          const testDocument = this.createMinimalDocument(schema);
+          const testDocument = createMinimalDocument(schema, generateSampleValue);
           const validation = schemaLoader.validateDocument(name, testDocument);
           
           validationTests.push({
@@ -470,40 +504,6 @@ async function healthRoutes(fastify, options) {
     }
   }
 
-  this.createMinimalDocument = (schema) => {
-    const document = {};
-    const required = schema.required || [];
-    
-    for (const field of required) {
-      const property = schema.properties[field];
-      if (property) {
-        document[field] = this.generateSampleValue(property);
-      }
-    }
-    
-    return document;
-  };
-
-  this.generateSampleValue = (property) => {
-    switch (property.type) {
-      case 'string':
-        if (property.format === 'email') return 'test@example.com';
-        if (property.format === 'date-time') return new Date().toISOString();
-        if (property.enum) return property.enum[0];
-        return 'sample';
-      case 'number':
-      case 'integer':
-        return property.minimum || 1;
-      case 'boolean':
-        return true;
-      case 'array':
-        return [];
-      case 'object':
-        return {};
-      default:
-        return null;
-    }
-  };
 }
 
-module.exports = healthRoutes;
+export default healthRoutes;
