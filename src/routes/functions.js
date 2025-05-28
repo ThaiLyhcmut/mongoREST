@@ -349,7 +349,7 @@ async function functionRoutes(fastify, options) {
 
   // Helper functions
   async function registerCategoryFunctions(fastify, category) {
-    for (const [name, func] of schemaLoader.functions) {
+    for (const [name, func] of fastify.schemaLoader.functions) {
       if (func.category === category) {
         const routePath = `/${func.name.replace(/([A-Z])/g, '-$1').toLowerCase()}`;
         
@@ -399,7 +399,7 @@ async function functionRoutes(fastify, options) {
     
     if (!functionName) return;
 
-    const functionDef = schemaLoader.getFunction(functionName);
+    const functionDef = fastify.schemaLoader.getFunction(functionName);
     if (!functionDef?.rateLimits) return;
 
     const userRateLimit = authManager.getRateLimit(request.user);

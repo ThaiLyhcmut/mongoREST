@@ -1,23 +1,38 @@
-const fastify = require('fastify');
-const path = require('path');
-require('dotenv').config();
+import fastifyLib from 'fastify';
+import path from 'path';
+import { config as dotenvConfig } from 'dotenv';
+import { fileURLToPath } from 'url';
+import fs from 'fs/promises';
+
+// Configure dotenv
+dotenvConfig();
+
+// ES module helpers
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+// Helper function to read JSON files
+async function readJson(filePath) {
+  const data = await fs.readFile(filePath, 'utf8');
+  return JSON.parse(data);
+}
 
 // Import core modules
-const SchemaLoader = require('./core/schema-loader');
-const DatabaseManager = require('./core/database-manager');
-const AuthManager = require('./middleware/auth');
-const ValidationManager = require('./middleware/validation');
-const ScriptParsingMiddleware = require('./middleware/script-parsing');
-const { createRelationshipMiddleware } = require('./middleware/relationships');
-const CRUDGenerator = require('./core/crud-generator');
-const FunctionExecutor = require('./core/function-executor');
-const MongoScriptParser = require('./core/script-parser');
+import SchemaLoader from './core/schema-loader.js';
+import DatabaseManager from './core/database-manager.js';
+import AuthManager from './middleware/auth.js';
+import ValidationManager from './middleware/validation.js';
+import ScriptParsingMiddleware from './middleware/script-parsing.js';
+import { createRelationshipMiddleware } from './middleware/relationships.js';
+import CRUDGenerator from './core/crud-generator.js';
+import FunctionExecutor from './core/function-executor.js';
+import MongoScriptParser from './core/script-parser.js';
 
 // Import routes
-const crudRoutes = require('./routes/crud');
-const functionRoutes = require('./routes/functions');
-const scriptRoutes = require('./routes/scripts');
-const healthRoutes = require('./routes/health');
+import crudRoutes from './routes/crud.js';
+import functionRoutes from './routes/functions.js';
+import scriptRoutes from './routes/scripts.js';
+import healthRoutes from './routes/health.js';
 
 class MongoRESTServer {
   constructor() {
@@ -36,19 +51,19 @@ class MongoRESTServer {
   async initialize() {
     try {
       // Initialize Fastify with configuration
-      this.fastify = fastify({
+      this.fastify = fastifyLib({
         logger: {
-          level: process.env.LOG_LEVEL || 'info',
-          prettyPrint: process.env.NODE_ENV === 'development'
+          level: process.env.LOG_LEVEL || 'info'
+          // Note: prettyPrint is deprecated in newer versions of Fastify
         },
         bodyLimit: parseInt(process.env.BODY_LIMIT) || 10 * 1024 * 1024, // 10MB
         keepAliveTimeout: parseInt(process.env.KEEP_ALIVE_TIMEOUT) || 5000
       });
 
       // Load configurations
-      const serverConfig = require('../config/server.json');
-      const authConfig = require('../config/auth.json');
-      const methodConfig = require('../config/method-operations.json');
+      const serverConfig = await readJson(path.join(__dirname, '../config/server.json'));
+      const authConfig = await readJson(path.join(__dirname, '../config/auth.json'));
+      const methodConfig = await readJson(path.join(__dirname, '../config/method-operations.json'));
 
       // Initialize core components
       this.schemaLoader = new SchemaLoader();
@@ -69,6 +84,17 @@ class MongoRESTServer {
       this.crudGenerator = new CRUDGenerator(this.schemaLoader, this.dbManager);
       this.functionExecutor = new FunctionExecutor(this.schemaLoader, this.dbManager);
 
+      // Decorate Fastify instance with core components so plugins can access them
+      this.fastify.decorate('schemaLoader', this.schemaLoader);
+      this.fastify.decorate('dbManager', this.dbManager);
+      this.fastify.decorate('authManager', this.authManager);
+      this.fastify.decorate('validationManager', this.validationManager);
+      this.fastify.decorate('crudGenerator', this.crudGenerator);
+      this.fastify.decorate('functionExecutor', this.functionExecutor);
+      this.fastify.decorate('scriptParser', this.scriptParser);
+      this.fastify.decorate('scriptParsingMiddleware', this.scriptParsingMiddleware);
+      this.fastify.decorate('relationshipMiddleware', this.relationshipMiddleware);
+
       // Register plugins
       await this.registerPlugins(serverConfig);
 
@@ -80,7 +106,11 @@ class MongoRESTServer {
 
       this.fastify.log.info('MongoREST server initialized successfully');
     } catch (error) {
-      this.fastify.log.error('Failed to initialize server:', error);
+      if (this.fastify) {
+        this.fastify.log.error('Error during server initialization:', error);
+      } else {
+        console.error('Error during server initialization:', error);
+      }
       throw error;
     }
   }
@@ -137,19 +167,28 @@ class MongoRESTServer {
       };
     });
 
+    // Decorate core authentication and authorization middleware
+    this.fastify.decorate('authenticate', this.authManager.authenticate.bind(this.authManager));
+    this.fastify.decorate('authorize', this.authManager.authorize.bind(this.authManager));
+    this.fastify.decorate('authorizeCollection', this.authManager.authorizeCollection.bind(this.authManager));
+    this.fastify.decorate('authorizeFunction', this.authManager.authorizeFunction.bind(this.authManager));
+
     // Register script parsing middleware decorators
-    this.fastify.decorate('parseMongoScript', this.scriptParsingMiddleware.parseMongoScript());
-    this.fastify.decorate('validateScript', this.scriptParsingMiddleware.validateScript());
-    this.fastify.decorate('scriptRateLimit', this.scriptParsingMiddleware.scriptRateLimit());
-    this.fastify.decorate('logScriptExecution', this.scriptParsingMiddleware.logScriptExecution());
-    this.fastify.decorate('analyzeScript', this.scriptParsingMiddleware.analyzeScript());
-    this.fastify.decorate('enhanceScriptResponse', this.scriptParsingMiddleware.enhanceScriptResponse());
+    this.fastify.decorate('parseMongoScript', this.scriptParsingMiddleware.parseMongoScript.bind(this.scriptParsingMiddleware));
+    this.fastify.decorate('validateScript', this.scriptParsingMiddleware.validateScript.bind(this.scriptParsingMiddleware));
+    this.fastify.decorate('scriptRateLimit', this.scriptParsingMiddleware.scriptRateLimit.bind(this.scriptParsingMiddleware));
+    this.fastify.decorate('logScriptExecution', this.scriptParsingMiddleware.logScriptExecution.bind(this.scriptParsingMiddleware));
+    this.fastify.decorate('analyzeScript', this.scriptParsingMiddleware.analyzeScript.bind(this.scriptParsingMiddleware));
+    this.fastify.decorate('enhanceScriptResponse', this.scriptParsingMiddleware.enhanceScriptResponse.bind(this.scriptParsingMiddleware));
+
+    // Register validation middleware decorators
+    this.fastify.decorate('validateMethodOperation', this.validationManager.validateMethodOperation.bind(this.validationManager));
 
     // Register relationship middleware decorators
-    this.fastify.decorate('parseRelationships', this.relationshipMiddleware.parseRelationships);
-    this.fastify.decorate('validateRelationshipPermissions', this.relationshipMiddleware.validateRelationshipPermissions);
-    this.fastify.decorate('logRelationshipQueries', this.relationshipMiddleware.logRelationshipQueries);
-    this.fastify.decorate('authorizeRelationships', this.authManager.authorizeRelationships());
+    this.fastify.decorate('parseRelationships', this.relationshipMiddleware.parseRelationships.bind(this.relationshipMiddleware));
+    this.fastify.decorate('validateRelationshipPermissions', this.relationshipMiddleware.validateRelationshipPermissions.bind(this.relationshipMiddleware));
+    this.fastify.decorate('logRelationshipQueries', this.relationshipMiddleware.logRelationshipQueries.bind(this.relationshipMiddleware));
+    this.fastify.decorate('authorizeRelationships', this.authManager.authorizeRelationships.bind(this.authManager));
 
     // Error handler
     this.fastify.setErrorHandler(async (error, request, reply) => {
@@ -264,7 +303,9 @@ class MongoRESTServer {
       const host = process.env.HOST || 'localhost';
       const port = parseInt(process.env.PORT) || 3000;
 
+      console.log(`Starting MongoREST server on http://${host}:${port}...`);
       await this.fastify.listen({ host, port });
+      console.log(`MongoREST server started at http://${host}:${port}`);
       
       this.fastify.log.info(`MongoREST server started at http://${host}:${port}`);
       this.fastify.log.info(`API Documentation: http://${host}:${port}/docs`);

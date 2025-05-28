@@ -2,13 +2,8 @@
 async function crudRoutes(fastify, options) {
   const { schemaLoader, dbManager, authManager, validationManager, crudGenerator } = fastify;
 
-  // Register authentication and authorization decorators
-  fastify.decorate('authenticate', authManager.authenticate());
-  fastify.decorate('authorizeCollection', authManager.authorizeCollection.bind(authManager));
-  fastify.decorate('validateMethodOperation', validationManager.validateMethodOperation());
-  
-  // Script parsing middleware is already registered in server.js
-  // We can use it here via fastify decorators
+  // Decorators should already be available from parent context via server.js
+  // No need to re-decorate here
 
   // Register CRUD routes for all collections
   await crudGenerator.registerRoutes(fastify);
