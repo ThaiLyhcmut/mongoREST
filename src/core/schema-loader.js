@@ -37,7 +37,6 @@ class SchemaLoader {
 
   async loadSchemas() {
     try {
-      console.log('Loading schemas...');
       
       // Load collection schemas
       await this.loadCollectionSchemas();

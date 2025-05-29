@@ -3,10 +3,14 @@
   "version": "1.0.0",
   "description": "PostgREST-inspired REST API layer for MongoDB using Fastify",
   "type": "module",
-  "main": "src/server.js",
+  "exports": {
+    ".": "./src/server.ts"
+  },
+  "main": "src/server.ts",
   "scripts": {
-    "start": "node src/server.js",
-    "dev": "nodemon src/server.js",
+    "start": "node --loader ts-node/esm src/server.ts",
+    "dev": "nodemon --exec node --loader ts-node/esm src/server.ts",
+    "build": "tsc",
     "setup": "node scripts/setup.js",
     "test": "jest",
     "test:watch": "jest --watch",
@@ -57,7 +61,15 @@
     "eslint-plugin-node": "^11.1.0",
     "eslint-plugin-promise": "^6.1.1",
     "supertest": "^6.3.3",
-    "axios": "^1.6.2"
+    "axios": "^1.6.2",
+    "typescript": "^5.3.3",
+    "@types/node": "^20.10.5",
+    "@types/lodash": "^4.14.202",
+    "@types/async": "^3.2.24",
+    "@types/jest": "^29.5.11",
+    "ts-node": "^10.9.2",
+    "@typescript-eslint/eslint-plugin": "^6.16.0",
+    "@typescript-eslint/parser": "^6.16.0"
   },
   "engines": {
     "node": ">=18.0.0",
