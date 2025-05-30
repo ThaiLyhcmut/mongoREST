@@ -1,0 +1,10 @@
+{
+  "watch": ["src/**/*.ts", "scripts/**/*.ts"],
+  "watchOptions": {
+    "followSymlinks": true,
+    "useFsEvents": true
+  },
+  "ext": "ts",
+  "ignore": ["src/**/*.test.ts", "dist", "node_modules"],
+  "exec": "node --loader ts-node/esm src/server.ts"
+}

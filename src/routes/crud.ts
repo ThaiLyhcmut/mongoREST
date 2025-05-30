@@ -22,7 +22,7 @@ import SchemaLoader from '../core/schema-loader';
 import DatabaseManager from '../core/database-manager';
 import AuthManager from '../middleware/auth';
 import ValidationManager from '../middleware/validation';
-import CRUDGenerator from '../core/crud-generator';
+import CRUDGenerator from '../core/curd-generator';
 
 // Extended Fastify instance with our custom properties
 interface ExtendedFastifyInstance extends FastifyInstance {

@@ -15,10 +15,10 @@ const __dirname = path.dirname(__filename);
 import {
   ServerConfig,
   MethodConfig
-} from './config/server.config.js';
+} from './config/server.config';
 import {
   AuthConfig
-} from './config/middleware/auth.config.js';
+} from './config/middleware/auth.config';
 
 interface MongoRESTContext {
   schemaLoader: SchemaLoader;
@@ -46,21 +46,21 @@ async function readJson(filePath: string): Promise<any> {
 }
 
 // Import core modules
-import SchemaLoader from './core/schema-loader.js';
-import DatabaseManager from './core/database-manager.js';
-import AuthManager from './middleware/auth.js';
-import ValidationManager from './middleware/validation.js';
-import ScriptParsingMiddleware from './middleware/script-parsing.js';
-import { createRelationshipMiddleware } from './middleware/relationships.js';
-import CRUDGenerator from './core/crud-generator.js';
-import FunctionExecutor from './core/function-executor.js';
-import MongoScriptParser from './core/script-parser.js';
+import SchemaLoader from './core/schema-loader';
+import DatabaseManager from './core/database-manager';
+import AuthManager from './middleware/auth';
+import ValidationManager from './middleware/validation';
+import ScriptParsingMiddleware from './middleware/script-parsing';
+import { createRelationshipMiddleware } from './middleware/relationships';
+import CRUDGenerator from './core/curd-generator';
+import FunctionExecutor from './core/function-executor';
+import MongoScriptParser from './core/script-parser';
 
 // Import routes
-import crudRoutes from './routes/crud.js';
-import functionRoutes from './routes/functions.js';
-import scriptRoutes from './routes/scripts.js';
-import healthRoutes from './routes/health.js';
+import crudRoutes from './routes/crud';
+import functionRoutes from './routes/functions';
+import scriptRoutes from './routes/scripts';
+import healthRoutes from './routes/health';
 
 class MongoRESTServer {
   private fastify: FastifyInstance | null;
@@ -120,8 +120,12 @@ class MongoRESTServer {
       this.relationshipMiddleware = createRelationshipMiddleware(this.schemaLoader);
 
       // Initialize generators
-      this.crudGenerator = new CRUDGenerator(this.schemaLoader, this.dbManager);
-      this.functionExecutor = new FunctionExecutor(this.schemaLoader, this.dbManager);
+      const options = {
+        schemaLoader: this.schemaLoader, 
+        dbManager: this.dbManager as any
+      }
+      this.crudGenerator = new CRUDGenerator(options);
+      this.functionExecutor = new FunctionExecutor(this.schemaLoader, this.dbManager as any);
 
       // Decorate Fastify instance with core components so plugins can access them
       this.fastify.decorate('schemaLoader', this.schemaLoader);

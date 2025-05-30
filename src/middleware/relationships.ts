@@ -1,7 +1,7 @@
 // Relationship Middleware - Parse and validate relationship queries
 import { FastifyRequest, FastifyReply } from 'fastify';
-import RelationshipQueryParser from '../core/relationship-parser.js';
-import RelationshipFilterParser from '../core/relationship-filter.js';
+import RelationshipQueryParser from '../core/relationship-parser';
+import RelationshipFilterParser from '../core/relationship-filter';
 import crypto from 'crypto';
 
 import {
@@ -11,11 +11,11 @@ import {
   RelationshipValidationError,
   ParsedFilters,
   SelectField
-} from '../config/middleware/relationships.config.js';
+} from '../config/middleware/relationships.config';
 
-import { UserContext } from '../config/middleware/auth.config.js';
+import { UserContext } from '../config/middleware/auth.config';
 
-import SchemaLoader from '../core/schema-loader.js';
+import SchemaLoader from '../core/schema-loader';
 
 // Extend FastifyRequest to include relationship properties
 declare module 'fastify' {
@@ -49,7 +49,7 @@ class RelationshipMiddleware {
   constructor(schemaLoader: SchemaLoader) {
     this.schemaLoader = schemaLoader;
     this.relationshipParser = new RelationshipQueryParser(schemaLoader);
-    this.filterParser = new RelationshipFilterParser(schemaLoader);
+    this.filterParser = new RelationshipFilterParser(schemaLoader as any);
   }
 
   /**

@@ -1,14 +1,14 @@
 // Script Parsing Middleware - Parse MongoDB scripts from request bodies
 import { FastifyRequest, FastifyReply } from 'fastify';
-import MongoScriptParser from '../core/script-parser.js';
+import MongoScriptParser from '../core/script-parser';
 
 import {
   ScriptRequestBody,
   ParserResult,
   ParsedScript
-} from '../config/middleware/script-pasing.config.js';
+} from '../config/middleware/script-pasing.config';
 
-import { UserContext } from '../config/middleware/auth.config.js';
+import { UserContext } from '../config/middleware/auth.config';
 // Extend FastifyRequest to include script parsing properties
 declare module 'fastify' {
   interface FastifyRequest {

@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 
 // Development setup script
-const fs = require('fs').promises;
-const path = require('path');
-const { spawn } = require('child_process');
+import * as fs from 'fs';
+import * as path from 'path';
+import { spawn } from 'child_process';
 
 async function setup() {
   console.log('🚀 Setting up MongoREST development environment...\n');
@@ -123,8 +123,8 @@ echo "✅ Pre-commit checks passed"
 }
 
 // Run setup if called directly
-if (require.main === module) {
+if (import.meta.url === `file://${process.argv[1]}`) {
   setup();
 }
 
-module.exports = { setup };
+export { setup };

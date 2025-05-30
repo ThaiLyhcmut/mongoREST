@@ -31,10 +31,10 @@ class CRUDGenerator {
     // GET /crud/{collection} - List documents with filtering, sorting, pagination
     fastify.get(basePath, {
       schema: this.getListSchema(collectionName, schema),
-      preHandler: [
-        fastify.authenticate,
-        fastify.authorizeCollection('read')
-      ]
+      // preHandler: [
+      //   fastify.authenticate,
+      //   fastify.authorizeCollection('read')
+      // ]
     }, async (request, reply) => {
       return this.handleList(request, reply, collectionName, schema);
     });

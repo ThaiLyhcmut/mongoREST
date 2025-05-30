@@ -147,8 +147,11 @@ class RelationshipQueryParser {
         modifiers.skip = parseInt(part.split('.')[1]);
       } else if (part === 'inner') {
         modifiers.joinType = 'inner';
+      } else if (part === 'select') {
+        modifiers.select = true;
       }
     }
+    
     
     return modifiers;
   }
