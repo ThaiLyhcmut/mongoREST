@@ -14,7 +14,7 @@ import {
   FunctionRouteParams,
   FunctionMetrics,
   FunctionMetricsResponse
-} from '../config/route.functions.config.js';
+} from '../config/route/functions.config';
 
 interface FunctionHistoryQuery {
   limit?: number;

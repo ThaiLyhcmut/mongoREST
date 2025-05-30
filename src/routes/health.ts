@@ -21,7 +21,7 @@ import {
   MetricsResponse,
   PropertySchema,
   DocumentSchema
-} from '../config/route.health.config.js';
+} from '../config/route/health.config';
 
 // Helper functions for health checks
 const createMinimalDocument = (schema: DocumentSchema, generateSampleValue: (property: PropertySchema) => any): { [key: string]: any } => {

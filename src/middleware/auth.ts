@@ -1,77 +1,30 @@
 // Authentication and Authorization Middleware
 import { FastifyRequest, FastifyReply } from 'fastify';
-import jwt from 'jsonwebtoken';
 
-interface AuthConfig {
-  roles?: { [role: string]: RoleConfig };
-  collectionPermissions?: { [collection: string]: CollectionPermissions };
-  functionPermissions?: { [functionName: string]: FunctionPermissions };
-  jwt?: {
-    secret: string;
-    expiresIn: string;
-    issuer?: string;
-    audience?: string;
-  };
-  rateLimiting?: {
-    enabled: boolean;
-    defaultLimits: RateLimitConfig;
-    roleLimits: { [role: string]: RateLimitConfig };
-  };
-}
+import {
+  AuthConfig,
+  RoleConfig,
+  CollectionPermissions,
+  FunctionPermissions,
+  RateLimitConfig,
+  UserPayload,
+  UserContext
+} from '../config/middleware/auth.config';
 
-interface RoleConfig {
-  name: string;
-  description: string;
-  permissions: string[];
-  inherits?: string[];
-  rateLimits?: RateLimitConfig;
-}
-
-interface CollectionPermissions {
-  read: string[];
-  create: string[];
-  update: string[];
-  delete: string[];
-  admin: string[];
-}
-
-interface FunctionPermissions {
-  execute: string[];
-  admin: string[];
-}
-
-interface RateLimitConfig {
-  requests: number;
-  window: string; // e.g., "1h", "15m"
-  burst?: number;
-}
-
-interface UserPayload {
-  sub: string; // User ID
-  email?: string;
-  role: string;
-  permissions?: string[];
-  iat?: number;
-  exp?: number;
-  iss?: string;
-  aud?: string;
-}
-
-interface UserContext extends UserPayload {
-  permissions: string[];
-  rateLimits: RateLimitConfig;
-  sessionId: string;
-}
+import SchemaLoader from '../core/schema-loader';
 
 // Extend FastifyRequest to include user context
 declare module 'fastify' {
   interface FastifyRequest {
-    user?: UserContext;
+    user: UserContext;
     authContext?: {
       token: string;
       validatedAt: number;
       expiresAt: number;
     };
+    customContext: {
+      schemaLoader: SchemaLoader 
+    }
   }
 }
 
@@ -104,7 +57,8 @@ class AuthManager {
           ...user,
           permissions: this.getUserPermissions(user),
           rateLimits: this.getUserRateLimit(user),
-          sessionId: this.generateSessionId(user)
+          sessionId: this.generateSessionId(user),
+          collections: []
         };
 
         request.user = enhancedUser;
@@ -461,6 +415,109 @@ class AuthManager {
   // Get user rate limits for external use
   getRateLimit(user: UserContext): RateLimitConfig {
     return user.rateLimits;
+  }
+
+  canAccessCollection(user: UserContext, collection: string, operation: 'read' | 'create' | 'update' | 'delete' | 'admin') {
+    // Admin has access to everything
+    if (user.role === 'admin') {
+      return true;
+    }
+
+    // Check role-level collection access
+    const roleConfig = this.roles[user.role];
+    if (roleConfig && roleConfig.collections) {
+      if (roleConfig.collections.includes('*') || roleConfig.collections.includes(collection)) {
+        // Check if role has the required operation permission
+        if (roleConfig.permissions.includes('*') || roleConfig.permissions.includes(operation)) {
+          return true;
+        }
+      }
+    }
+
+    // Check collection-specific permissions
+    const collectionPerms = this.collectionPermissions[collection];
+    if (collectionPerms && collectionPerms[operation]) {
+      return collectionPerms[operation].includes(user.role);
+    }
+
+    // Check user-specific permissions (from JWT token)
+    if (user.collections && user.permissions) {
+      const hasCollection = user.collections.includes('*') || user.collections.includes(collection);
+      const hasOperation = user.permissions.includes('*') || user.permissions.includes(operation);
+      return hasCollection && hasOperation;
+    }
+
+    return false;
+  }
+
+  canAccessRelationship(user: UserContext, sourceCollection: string, relationshipName: string | undefined, targetCollection: string) {
+    // Admin has access to everything
+    if (user.role === 'admin') {
+      return true;
+    }
+
+    // Must have read access to both source and target collections
+    const canReadSource = this.canAccessCollection(user, sourceCollection, 'read');
+    const canReadTarget = this.canAccessCollection(user, targetCollection, 'read');
+    
+    if (!canReadSource || !canReadTarget) {
+      return false;
+    }
+
+    // Additional relationship-specific restrictions could be added here
+    // For now, if user can read both collections, they can access the relationship
+    return true;
+  }
+
+  authorizeRelationships() {
+    return async (request: FastifyRequest, reply: FastifyReply) => {
+      const user = request.user;
+      
+      if (!user) {
+        return reply.code(401).send({
+          error: 'Authentication required'
+        });
+      }
+
+      // Check if request has relationship queries
+      if (!request.relationshipQuery || !request.relationshipQuery.fields) {
+        return; // No relationships to authorize
+      }
+
+      const sourceCollection = (request.params as any)?.collection || 
+                              request.routerPath.split('/').pop();
+      
+      // Check each relationship in the query
+      for (const field of request.relationshipQuery.fields) {
+        if (field.type === 'relationship' || field.type === 'aggregate') {
+          const relationName = field.relationName || field.alias;
+          
+          // Get relationship definition from schema
+          const schemaLoader = request.customContext.schemaLoader;
+          const schema = schemaLoader.getSchema(sourceCollection);
+          const relationship = relationName ? schema?.relationships?.[relationName] : undefined;
+          
+          if (relationship) {
+            const canAccess = this.canAccessRelationship(
+              user, 
+              sourceCollection, 
+              relationName, 
+              relationship.collection
+            );
+            
+            if (!canAccess) {
+              return reply.code(403).send({
+                error: 'Relationship access denied',
+                message: `You don't have permission to access relationship '${relationName}'`,
+                sourceCollection,
+                targetCollection: relationship.collection,
+                userRole: user.role
+              });
+            }
+          }
+        }
+      }
+    };
   }
 }
 

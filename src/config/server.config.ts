@@ -32,18 +32,6 @@ export interface FunctionPermissions {
   [functionName: string]: string[]; // function name -> array of roles
 }
 
-// Auth Configuration Interface
-export interface AuthConfig {
-  jwt: JWTConfig;
-  roles: {
-    [roleName: string]: RoleConfig;
-  };
-  collectionPermissions: {
-    [collectionName: string]: CollectionPermissions;
-  };
-  functionPermissions: FunctionPermissions;
-}
-
 // HTTP Method Operations Mapping Interface
 export interface MethodOperationsMapping {
   allowedOperations: string[];

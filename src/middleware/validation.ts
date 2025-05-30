@@ -1,32 +1,11 @@
 // Validation Middleware - Schema and method validation for API requests
 import { FastifyRequest, FastifyReply } from 'fastify';
 
-interface MethodConfig {
-  mappings?: { [method: string]: { allowedOperations: string[] } };
-  specialCases?: { [key: string]: any };
-  operationInference?: { [key: string]: any };
-  strict?: boolean;
-  validation?: {
-    enabled: boolean;
-    logViolations: boolean;
-    rejectOnViolation: boolean;
-  };
-}
-
-interface ValidationError {
-  error: string;
-  message: string;
-  method?: string;
-  operation?: string;
-  allowed?: string[];
-  suggestion?: string;
-}
-
-interface SchemaValidationOptions {
-  strict?: boolean;
-  coerceTypes?: boolean;
-  removeAdditional?: boolean;
-}
+import {
+  MethodConfig,
+  ValidationError,
+  SchemaValidationOptions
+} from '../config/middleware/validation.config';
 
 // Extend FastifyRequest to include our custom properties
 declare module 'fastify' {
@@ -553,6 +532,22 @@ class ValidationManager {
       invalidDocuments: 1,
       errors: ['Sample document missing required field "name"'],
       recommendations: ['Consider migrating existing documents to match updated schema']
+    };
+  }
+
+    validateAggregationPipeline(pipeline: any ) {
+    if (!Array.isArray(pipeline)) {
+      throw new Error('Aggregation pipeline must be an array');
+    }
+
+    const writeStages = ['$out', '$merge'];
+    const hasWriteStages = pipeline.some(stage => 
+      writeStages.some(writeStage => stage[writeStage])
+    );
+
+    return {
+      hasWriteStages,
+      isReadOnly: !hasWriteStages
     };
   }
 }

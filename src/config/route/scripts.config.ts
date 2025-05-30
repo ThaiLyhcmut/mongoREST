@@ -218,16 +218,3 @@ export interface ScriptHistoryItem {
   complexity: number;
   recordsAffected: number;
 }
-
-// Extend FastifyRequest to include custom properties
-declare module 'fastify' {
-  interface FastifyRequest {
-    parsedScript?: ParsedScript;
-    parsedScripts?: (BatchScriptData & { parsed: ParsedScript; index: number })[];
-    scriptAnalysis?: any;
-    user?: {
-      sub: string;
-      [key: string]: any;
-    };
-  }
-}

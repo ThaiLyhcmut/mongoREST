@@ -2,41 +2,17 @@
 import { FastifyRequest, FastifyReply } from 'fastify';
 import MongoScriptParser from '../core/script-parser.js';
 
-interface ScriptRequestBody {
-  script?: string;
-  mongoScript?: string;
-  query?: string;
-  [key: string]: any;
-}
+import {
+  ScriptRequestBody,
+  ParserResult,
+  ParsedScript
+} from '../config/middleware/script-pasing.config.js';
 
-interface ParserResult {
-  collection: any;
-  operation: any;
-  params: any;
-  meta?: {
-    originalScript: string;
-    complexity: number;
-    collections: string[];
-    parsedAt: string;
-  };
-}
-
-interface ParsedScript {
-  collection: string;
-  operation: string;
-  params: { [key: string]: any };
-  meta: {
-    originalScript: string;
-    complexity: number;
-    collections: string[];
-    parsedAt: string;
-  };
-}
-
+import { UserContext } from '../config/middleware/auth.config.js';
 // Extend FastifyRequest to include script parsing properties
 declare module 'fastify' {
   interface FastifyRequest {
-    scriptParsed?: ParsedScript;
+    parsedScript?: ParsedScript;
     isScriptRequest?: boolean;
     scriptContext?: {
       originalScript: string;
@@ -44,11 +20,31 @@ declare module 'fastify' {
       validated: boolean;
     };
     mongoOperation?: string;
+    scriptAnalysis?: {
+      readOperations: number;
+      writeOperations: number;
+      aggregationStages: number;
+      indexHints: number;
+      crossCollectionRefs: boolean;
+    };
+    user: UserContext
   }
+}
+
+interface ScriptRateLimitData {
+  count: number;
+  complexitySum: number;
+  windowStart: number;
+}
+
+interface UserLimits {
+  maxScripts: number;
+  maxComplexity: number;
 }
 
 class ScriptParsingMiddleware {
   private parser: MongoScriptParser;
+  private scriptCounts: Map<string, ScriptRateLimitData> = new Map();
 
   constructor() {
     this.parser = new MongoScriptParser();
@@ -58,11 +54,10 @@ class ScriptParsingMiddleware {
   parseMongoScript() {
     return async (request: FastifyRequest, reply: FastifyReply): Promise<void> => {
       try {
-        const body = request.body as ScriptRequestBody || {};
+        const body = (request.body as ScriptRequestBody) || {};
         
         // Check if request contains a MongoDB script
         if (this.isScriptRequest(body)) {
-          const startTime = Date.now();
           const script = body.script || body.mongoScript || body.query;
           
           if (!script) {
@@ -71,24 +66,13 @@ class ScriptParsingMiddleware {
               message: 'Script content is required but was empty'
             });
           }
-            // Parse script to parameters
-          const result: ParserResult = this.parser.parseAndPrepare(script);
           
-          // The parser returns an object with collection, operation, params, and meta
-          const parsed: ParsedScript = {
-            collection: result.collection,
-            operation: result.operation,
-            params: result.params,
-            meta: result.meta
-          };
-            // Store parsed result in request context
-          request.scriptParsed = parsed;
+          // Parse script to parameters
+          const parsed = this.parser.parseAndPrepare(script);
+          
+          // Store parsed result in request context
+          request.parsedScript = parsed;
           request.isScriptRequest = true;
-          request.scriptContext = {
-            originalScript: script,
-            parseTime: Date.now() - startTime,
-            validated: true
-          };
           
           // Override collection parameter if parsed from script
           if (parsed.collection && !(request.params as any)?.collection) {
@@ -111,87 +95,342 @@ class ScriptParsingMiddleware {
           request.log.info('MongoDB script parsed successfully', {
             collection: parsed.collection,
             operation: parsed.operation,
-            complexity: parsed.meta.complexity,
-            parseTime: request.scriptContext.parseTime
+            complexity: parsed.meta?.complexity || 0
           });
         }
         
       } catch (error: any) {
         request.log.error('Script parsing failed:', error);
         
-        // Determine if we should reject or continue
-        if (this.isScriptRequest(request.body as ScriptRequestBody)) {
-          return reply.code(400).send({
-            error: 'Script parsing failed',
-            message: error.message,
-            details: this.getParsingErrorDetails(error)
-          });
-        }
-        
-        // If not a script request, continue normally
-        return;
+        return reply.code(400).send({
+          error: 'Script parsing failed',
+          message: error.message,
+          type: 'SCRIPT_PARSE_ERROR'
+        });
       }
     };
   }
-  // Middleware to validate parsed scripts
-  validateParsedScript() {
+
+  // Check if request contains MongoDB script
+  isScriptRequest(body: ScriptRequestBody): boolean {
+    return !!(
+      body.script || 
+      body.mongoScript || 
+      (body.query && typeof body.query === 'string' && body.query.includes('db.'))
+    );
+  }
+
+  // Middleware for script-specific validation
+  validateScript() {
     return async (request: FastifyRequest, reply: FastifyReply): Promise<void> => {
-      if (!request.isScriptRequest || !request.scriptParsed) {
+      if (!request.isScriptRequest) {
         return; // Skip if not a script request
       }
 
-      try {
-        const parsed = request.scriptParsed;
-        
-        // Basic script validation (security is handled by parser during parsing)
-        // If we reach here, the script passed basic security validation
-        
-        // Complexity validation - convert number to complexity level
-        const complexityLevel = this.getComplexityLevel(parsed.meta.complexity);
-        const maxComplexity = process.env.MAX_SCRIPT_COMPLEXITY || 'high';
-        if (this.isComplexityExceeded(complexityLevel, maxComplexity)) {
-          return reply.code(429).send({
-            error: 'Script complexity exceeded',
-            message: `Script complexity '${complexityLevel}' exceeds maximum allowed '${maxComplexity}'`,
-            complexityScore: parsed.meta.complexity
-          });
-        }
-        
-        // Collection validation
-        const schemaLoader = (request.server as any).schemaLoader;
-        if (parsed.collection && !schemaLoader.hasCollection(parsed.collection)) {
-          return reply.code(404).send({
-            error: 'Collection not found',
-            message: `Collection '${parsed.collection}' does not exist`,
-            availableCollections: Array.from(schemaLoader.collections.keys())
-          });
-        }
-        
-        request.log.info('Script validation passed', {
-          collection: parsed.collection,
-          operation: parsed.operation,
-          complexity: complexityLevel,
-          complexityScore: parsed.meta.complexity
+      const parsed = request.parsedScript;
+      
+      if (!parsed) {
+        return reply.code(400).send({
+          error: 'Script validation failed',
+          message: 'No parsed script found',
+          type: 'SCRIPT_VALIDATION_ERROR'
         });
+      }
+
+      try {
+        // Check complexity limits
+        await this.checkComplexityLimits(parsed, request.user);
+        
+        // Check collection access
+        const authManager = (request as any).context?.authManager;
+        if (authManager) {
+          await this.checkScriptCollectionAccess(parsed, request.user, authManager);
+          
+          // Check operation permissions
+          await this.checkScriptOperationPermissions(parsed, request.user, authManager);
+        }
         
       } catch (error: any) {
-        request.log.error('Script validation failed:', error);
-        return reply.code(500).send({
-          error: 'Script validation error',
-          message: error.message
+        return reply.code(403).send({
+          error: 'Script validation failed',
+          message: error.message,
+          type: 'SCRIPT_VALIDATION_ERROR'
         });
       }
     };
   }
+
+  // Check script complexity against user limits
+  async checkComplexityLimits(parsed: ParsedScript, user: any): Promise<void> {
+    const userRole = user?.role || 'user';
+    const complexity = parsed.meta?.complexity || 0;
+    
+    // Define complexity limits per role
+    const complexityLimits: { [key: string]: number } = {
+      admin: 10,
+      dev: 8,
+      analyst: 6,
+      user: 4
+    };
+    
+    const maxComplexity = complexityLimits[userRole] || 2;
+    
+    if (complexity > maxComplexity) {
+      throw new Error(`Script complexity (${complexity}) exceeds limit (${maxComplexity}) for role '${userRole}'`);
+    }
+  }
+
+  // Check access to collections referenced in script
+  async checkScriptCollectionAccess(parsed: ParsedScript, user: any, authManager: any): Promise<void> {
+    const collections = parsed.meta?.collections || [];
+    const operation = this.getOperationType(parsed.operation);
+    
+    for (const collection of collections) {
+      if (!authManager.canAccessCollection(user, collection, operation)) {
+        throw new Error(`Access denied to collection '${collection}' for operation '${operation}'`);
+      }
+    }
+  }
+
+  // Check operation permissions
+  async checkScriptOperationPermissions(parsed: ParsedScript, user: any, authManager: any): Promise<void> {
+    const operation = parsed.operation;
+    const operationType = this.getOperationType(operation);
+    
+    if (!authManager.hasPermission(user, operationType)) {
+      throw new Error(`Permission denied for operation '${operation}'`);
+    }
+  }
+
+  // Map MongoDB operations to permission types
+  getOperationType(operation: string): string {
+    const operationMap: { [key: string]: string } = {
+      find: 'read',
+      findOne: 'read',
+      countDocuments: 'read',
+      distinct: 'read',
+      insertOne: 'create',
+      insertMany: 'create',
+      updateOne: 'update',
+      updateMany: 'update',
+      replaceOne: 'update',
+      deleteOne: 'delete',
+      deleteMany: 'delete',
+      aggregate: 'read' // Default to read, but may be write depending on pipeline
+    };
+    
+    return operationMap[operation] || 'read';
+  }
+
+  // Middleware to log script execution
+  logScriptExecution() {
+    return async (request: FastifyRequest, reply: FastifyReply): Promise<void> => {
+      if (!request.isScriptRequest) {
+        return;
+      }
+
+      const parsed = request.parsedScript;
+      
+      if (!parsed) {
+        return;
+      }
+
+      // Log script execution attempt
+      const logEntry = {
+        timestamp: new Date().toISOString(),
+        user: request.user?.sub,
+        userRole: request.user?.role,
+        script: parsed.meta?.originalScript,
+        collection: parsed.collection,
+        operation: parsed.operation,
+        complexity: parsed.meta?.complexity,
+        ip: request.ip,
+        userAgent: request.headers['user-agent']
+      };
+      
+      request.log.info('MongoDB script execution', logEntry);
+      
+      // In production, you might want to store this in a dedicated audit log
+      // await this.storeAuditLog(logEntry);
+    };
+  }
+
+  // Create middleware to enhance response with script information
+  enhanceScriptResponse() {
+    return async (request: FastifyRequest, reply: any): Promise<void> => {
+      if (!request.isScriptRequest) {
+        return;
+      }
+
+      // Add hook to enhance response
+      reply.addHook('onSend', async (request: FastifyRequest, payload: any) => {
+        try {
+          const response = JSON.parse(payload as string);
+          
+          // Add script metadata to response
+          if (response && typeof response === 'object' && request.parsedScript) {
+            response.script = {
+              original: request.parsedScript.meta?.originalScript,
+              parsed: this.parser.parametersToScript(
+                request.parsedScript.collection,
+                request.parsedScript.operation,
+                request.parsedScript.params
+              ),
+              complexity: request.parsedScript.meta?.complexity,
+              collections: request.parsedScript.meta?.collections
+            };
+          }
+          
+          return JSON.stringify(response);
+        } catch (error) {
+          // If response is not JSON, return as-is
+          return payload;
+        }
+      });
+    };
+  }
+
+  // Middleware to handle script format conversion
+  handleScriptFormats() {
+    return async (request: FastifyRequest, reply: FastifyReply): Promise<void> => {
+      const contentType = request.headers['content-type'];
+      
+      // Handle different script formats
+      if (contentType && contentType.includes('text/javascript')) {
+        // Raw JavaScript/MongoDB shell script
+        const scriptContent = (request.body as Buffer).toString();
+        request.body = { script: scriptContent };
+      } else if (contentType && contentType.includes('application/x-mongodb-script')) {
+        // Custom MongoDB script content type
+        const scriptContent = (request.body as Buffer).toString();
+        request.body = { mongoScript: scriptContent };
+      }
+    };
+  }
+
+  // Create rate limiting middleware for scripts
+  scriptRateLimit() {
+    return async (request: FastifyRequest, reply: FastifyReply): Promise<void> => {
+      if (!request.isScriptRequest) {
+        return;
+      }
+
+      const userId = request.user?.sub;
+      const complexity = request.parsedScript?.meta?.complexity || 1;
+      
+      if (!userId) return;
+      
+      const key = `script_rate_limit:${userId}`;
+      const window = 60 * 1000; // 1 minute window
+      const now = Date.now();
+      
+      // Get current counts
+      let userCounts = this.scriptCounts.get(key) || { count: 0, complexitySum: 0, windowStart: now };
+      
+      // Reset if window expired
+      if (now - userCounts.windowStart > window) {
+        userCounts = { count: 0, complexitySum: 0, windowStart: now };
+      }
+      
+      // Define limits based on user role
+      const limits: { [key: string]: UserLimits } = {
+        admin: { maxScripts: 100, maxComplexity: 200 },
+        dev: { maxScripts: 50, maxComplexity: 100 },
+        analyst: { maxScripts: 30, maxComplexity: 60 },
+        user: { maxScripts: 10, maxComplexity: 20 }
+      };
+      
+      const userLimits = limits[request.user?.role || 'user'] || limits.user;
+      
+      // Check limits
+      if (userCounts.count >= userLimits.maxScripts) {
+        return reply.code(429).send({
+          error: 'Script rate limit exceeded',
+          message: `Maximum ${userLimits.maxScripts} scripts per minute`,
+          type: 'SCRIPT_RATE_LIMIT_EXCEEDED'
+        });
+      }
+      
+      if (userCounts.complexitySum + complexity > userLimits.maxComplexity) {
+        return reply.code(429).send({
+          error: 'Script complexity limit exceeded',
+          message: `Maximum complexity ${userLimits.maxComplexity} per minute`,
+          type: 'SCRIPT_COMPLEXITY_LIMIT_EXCEEDED'
+        });
+      }
+      
+      // Update counts
+      userCounts.count += 1;
+      userCounts.complexitySum += complexity;
+      this.scriptCounts.set(key, userCounts);
+      
+      // Clean up old entries periodically
+      if (Math.random() < 0.1) {
+        this.cleanupRateLimitCache(this.scriptCounts, window);
+      }
+    };
+  }
+
+  // Clean up expired rate limit entries
+  cleanupRateLimitCache(cache: Map<string, ScriptRateLimitData>, window: number): void {
+    const now = Date.now();
+    for (const [key, data] of cache.entries()) {
+      if (now - data.windowStart > window * 2) {
+        cache.delete(key);
+      }
+    }
+  }
+
+  // Create script analysis middleware
+  analyzeScript() {
+    return async (request: FastifyRequest, reply: FastifyReply): Promise<void> => {
+      if (!request.isScriptRequest) {
+        return;
+      }
+
+      const parsed = request.parsedScript;
+      
+      if (!parsed) {
+        return;
+      }
+
+      const analysis = {
+        readOperations: 0,
+        writeOperations: 0,
+        aggregationStages: 0,
+        indexHints: 0,
+        crossCollectionRefs: (parsed.meta?.collections?.length || 0) > 1
+      };
+
+      // Analyze operation type
+      const writeOps = ['insertOne', 'insertMany', 'updateOne', 'updateMany', 'replaceOne', 'deleteOne', 'deleteMany'];
+      if (writeOps.includes(parsed.operation)) {
+        analysis.writeOperations++;
+      } else {
+        analysis.readOperations++;
+      }
+
+      // Analyze aggregation pipeline
+      if (parsed.operation === 'aggregate' && parsed.params.pipeline) {
+        analysis.aggregationStages = Array.isArray(parsed.params.pipeline) ? parsed.params.pipeline.length : 0;
+      }
+
+      // Store analysis in request context
+      request.scriptAnalysis = analysis;
+      
+      request.log.debug('Script analysis completed', analysis);
+    };
+  }
+
   // Middleware to transform script parameters for CRUD operations
   transformScriptParams() {
     return async (request: FastifyRequest, reply: FastifyReply): Promise<void> => {
-      if (!request.isScriptRequest || !request.scriptParsed) {
+      if (!request.isScriptRequest || !request.parsedScript) {
         return; // Skip if not a script request
       }
 
       try {
-        const parsed = request.scriptParsed;
+        const parsed = request.parsedScript;
         const transformedBody: { [key: string]: any } = {};
         
         // Transform based on operation type
@@ -282,39 +521,6 @@ class ScriptParsingMiddleware {
     };
   }
 
-  // Check if request body contains a MongoDB script
-  private isScriptRequest(body: ScriptRequestBody): boolean {
-    return !!(body.script || body.mongoScript || body.query);
-  }
-  // Get detailed parsing error information
-  private getParsingErrorDetails(error: any): { [key: string]: any } {
-    return {
-      type: error.name || 'ParseError',
-      line: error.line,
-      column: error.column,
-      expected: error.expected,
-      found: error.found,
-      suggestion: this.getSuggestionForError(error)
-    };
-  }
-
-  // Convert numeric complexity score to level
-  private getComplexityLevel(score: number): string {
-    if (score <= 3) return 'low';
-    if (score <= 6) return 'medium';
-    if (score <= 10) return 'high';
-    return 'extreme';
-  }
-
-  // Check if script complexity exceeds allowed level
-  private isComplexityExceeded(scriptComplexity: string, maxComplexity: string): boolean {
-    const complexityLevels = ['low', 'medium', 'high', 'extreme'];
-    const scriptLevel = complexityLevels.indexOf(scriptComplexity);
-    const maxLevel = complexityLevels.indexOf(maxComplexity);
-    
-    return scriptLevel > maxLevel;
-  }
-
   // Transform MongoDB sort parameters to REST API format
   private transformSortParams(sort: any): string {
     if (typeof sort === 'string') {
@@ -383,29 +589,9 @@ class ScriptParsingMiddleware {
     return transformed;
   }
 
-  // Get suggestion for parsing errors
-  private getSuggestionForError(error: any): string {
-    if (error.message.includes('find')) {
-      return 'Check syntax: db.collection.find({filter}, {projection})';
-    }
-    
-    if (error.message.includes('insert')) {
-      return 'Check syntax: db.collection.insertOne({document})';
-    }
-    
-    if (error.message.includes('update')) {
-      return 'Check syntax: db.collection.updateOne({filter}, {$set: {update}})';
-    }
-    
-    if (error.message.includes('delete')) {
-      return 'Check syntax: db.collection.deleteOne({filter})';
-    }
-    
-    if (error.message.includes('aggregate')) {
-      return 'Check syntax: db.collection.aggregate([{$match: {}}, {$group: {}}])';
-    }
-    
-    return 'Verify MongoDB query syntax and try again';
+  // Get parser instance for external use
+  getParser(): MongoScriptParser {
+    return this.parser;
   }
 }
 

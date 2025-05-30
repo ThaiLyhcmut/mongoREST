@@ -14,9 +14,11 @@ const __dirname = path.dirname(__filename);
 // Import configuration interfaces
 import {
   ServerConfig,
-  AuthConfig,
   MethodConfig
 } from './config/server.config.js';
+import {
+  AuthConfig
+} from './config/middleware/auth.config.js';
 
 interface MongoRESTContext {
   schemaLoader: SchemaLoader;
