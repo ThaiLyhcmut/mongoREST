@@ -182,7 +182,7 @@ class CRUDGenerator {
         
         // Execute aggregation
         const collection = this.dbManager.collection(collectionName);
-        console.log("pipeline at this", pipeline)
+        console.log("Pipeline:", JSON.stringify(pipeline, null, 2));
         const documents = await collection.aggregate(pipeline).toArray();
         
         // Get total count for pagination (separate query)
